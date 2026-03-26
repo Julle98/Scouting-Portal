@@ -1,0 +1,64 @@
+# ─── Dependencies ───────────────────────────────────────────
+node_modules/
+.pnp
+.pnp.js
+
+# ─── Build Results ───────────────────────────────────────────
+dist/
+dist-ssr/
+build/
+
+# ─── Firebase ────────────────────────────────────────────────
+# IMPORTANT: If you are using Firebase, make sure to add the appropriate files and directories to this section. This typically includes configuration files and any local environment variable files that contain sensitive information.
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.firebaserc
+firebase-debug.log
+firebase-debug.*.log
+firestore-debug.log
+firestore.rules
+ui-debug.log
+.firebase/
+vite.config.js
+storage.rules
+
+# ─── Local Environment Variables ─────────────────────────────
+# If you have local environment variable files, add them here. Make sure to keep any example files that are meant to be shared.
+*.env
+*.env.*
+!*.env.example
+changelog.json
+meeting_data.json
+*index.html
+*firebase.json
+
+# ─── Editors & OS ───────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehtumbs.db
+Thumbs.db
+*.swp
+*.swo
+.vscode/settings.json
+.idea/
+
+# ─── Logs ───────────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ─── Tests ───────────────────────────────────────────────────
+coverage/
+.nyc_output
+
+# ─── Vite ────────────────────────────────────────────────────
+*.local
+vite.config.js.timestamp-*
