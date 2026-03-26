@@ -40,7 +40,7 @@ An internal management application for invidual scout group leaders. Built with 
 ### 1. Clone repository
 
 ```bash
-git clone https://github.com/USERNAME/scout-portal.git
+git clone https://github.com/Julle98/scout-portal.git
 cd scout-portal
 npm install
 ```
