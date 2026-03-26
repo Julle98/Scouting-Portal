@@ -14,7 +14,7 @@ import { Avatar } from "../components/ui/Avatar"
 import { useLinkWarning, LinkWarningModal, TextWithLinks } from "../components/ui/LinkWarning"
 
 const EMOJIS = ["😀","😂","🥰","😎","🤔","😅","🙏","👍","👎","❤️","🔥","✅","⚠️","🎉","🏕️","⛺","🧭","🎒","🍳","💪","🤝","👏","😴","🤣","😤","🫡","🌟","💯","🆗","🆒"]
-const GIPHY_KEY = "REPLACE_WITH_YOUR_OWN"
+const GIPHY_KEY = import.meta.env.VITE_GIPHY_API_KEY;
 const QUICK_REACTIONS = ["👍","❤️","😂","🔥","🎉","😎"]
 const MAX_MSG_LENGTH = 1000
 
