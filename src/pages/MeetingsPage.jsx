@@ -81,7 +81,7 @@ export default function MeetingsPage() {
   }
 
   function statusColor(m) {
-    return m?.status==="away"?"#f59e0b":m?.status==="busy"?"#ef4444":m?.status==="offline"?"#545d75":m?.online?"#22c55e":"#545d75"
+    return m?.status==="away"?"#f59e0b":m?.status==="busy"?"#ef4444":m?.status==="offline"?"var(--text3)":m?.online?"#22c55e":"var(--text3)"
   }
   function formatLastSeen(ts) {
     if (!ts) return "Ei tietoa"
@@ -97,7 +97,7 @@ export default function MeetingsPage() {
     <div style={{ flex:1, overflowY:"auto", padding:24, fontFamily:"system-ui" }}>
       <div style={{ maxWidth:860, margin:"0 auto" }}>
         <h2 style={{ margin:"0 0 6px", fontSize:18, fontWeight:600 }}>📅 Kokousvuorot</h2>
-        <p style={{ fontSize:13, color:"#545d75", margin:"0 0 24px" }}>
+        <p style={{ fontSize:13, color:"var(--text3)", margin:"0 0 24px" }}>
           {DAY_NAMES[now.getDay()].charAt(0).toUpperCase() + DAY_NAMES[now.getDay()].slice(1)} {now.toLocaleDateString("fi-FI")} klo {now.toLocaleTimeString("fi-FI",{hour:"2-digit",minute:"2-digit"})}
         </p>
 
@@ -107,7 +107,7 @@ export default function MeetingsPage() {
             <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
               <div style={{ width:4, height:20, borderRadius:2, background:cat.color, flexShrink:0 }} />
               <span style={{ fontSize:15, fontWeight:600, color:cat.color }}>{cat.category}</span>
-              {cat.note && <span style={{ fontSize:11, color:"#545d75", fontStyle:"italic" }}>— {cat.note}</span>}
+              {cat.note && <span style={{ fontSize:11, color:"var(--text3)", fontStyle:"italic" }}>— {cat.note}</span>}
             </div>
 
             <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
@@ -116,7 +116,7 @@ export default function MeetingsPage() {
                 const today   = isToday(group)
                 return (
                   <div key={group.name}
-                    style={{ background:"#161b27", border:`1px solid ${ongoing ? cat.color+"66" : today ? cat.color+"33" : "rgba(255,255,255,0.07)"}`, borderRadius:12, padding:"14px 16px",
+                    style={{ background:"var(--bg2)", border:`1px solid ${ongoing ? cat.color+"66" : today ? cat.color+"33" : "var(--border)"}`, borderRadius:12, padding:"14px 16px",
                       boxShadow: ongoing ? `0 0 0 1px ${cat.color}44` : "none" }}>
                     <div style={{ display:"flex", alignItems:"flex-start", gap:12, flexWrap:"wrap" }}>
 
@@ -124,7 +124,7 @@ export default function MeetingsPage() {
                       <div style={{ flex:1, minWidth:160 }}>
                         <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
                           <span style={{ fontWeight:600, fontSize:14, cursor:"pointer" }} onClick={() => setSelectedGroup({ ...group, category: cat.category, color: cat.color })}>{group.name}</span>
-                          <span style={{ fontSize:11, color:"#545d75", background:"#1e2535", padding:"1px 7px", borderRadius:10 }}>s. {group.year}</span>
+                          <span style={{ fontSize:11, color:"var(--text3)", background:"var(--bg3)", padding:"1px 7px", borderRadius:10 }}>s. {group.year}</span>
                           {ongoing && (
                             <span style={{ fontSize:11, fontWeight:600, color:cat.color, background:`${cat.color}20`, padding:"2px 8px", borderRadius:10, display:"flex", alignItems:"center", gap:4 }}>
                               <span style={{ width:6, height:6, borderRadius:"50%", background:cat.color, display:"inline-block", animation:"pulse 1.5s infinite" }} />
@@ -139,23 +139,23 @@ export default function MeetingsPage() {
                         {/* Ajat + paikka */}
                         {group.day && (
                           <div style={{ display:"flex", gap:14, flexWrap:"wrap" }}>
-                            <span style={{ fontSize:12, color:"#8b92a8", display:"flex", alignItems:"center", gap:4 }}>
+                            <span style={{ fontSize:12, color:"var(--text2)", display:"flex", alignItems:"center", gap:4 }}>
                               🗓 {group.day.charAt(0).toUpperCase()+group.day.slice(1)} {group.time}
                             </span>
-                            <span style={{ fontSize:12, color:"#8b92a8", display:"flex", alignItems:"center", gap:4 }}>
+                            <span style={{ fontSize:12, color:"var(--text2)", display:"flex", alignItems:"center", gap:4 }}>
                               📍 {group.location}
                             </span>
                           </div>
                         )}
                         {!group.day && group.location && (
-                          <span style={{ fontSize:12, color:"#545d75" }}>📍 {group.location}</span>
+                          <span style={{ fontSize:12, color:"var(--text3)" }}>📍 {group.location}</span>
                         )}
                       </div>
 
                       {/* Johtajat */}
                       {group.leaders.length > 0 && (
                         <div style={{ display:"flex", flexWrap:"wrap", gap:6, alignItems:"center" }}>
-                          <span style={{ fontSize:11, color:"#545d75", marginRight:2 }}>Johtajat:</span>
+                          <span style={{ fontSize:11, color:"var(--text3)", marginRight:2 }}>Johtajat:</span>
                           {group.leaders.map(name => {
                             const u = findUser(name)
                             return u ? (
@@ -163,13 +163,13 @@ export default function MeetingsPage() {
                                 style={{ display:"flex", alignItems:"center", gap:5, background:"rgba(79,126,247,0.1)", border:"1px solid rgba(79,126,247,0.25)", borderRadius:20, padding:"3px 10px 3px 4px", cursor:"pointer", fontFamily:"system-ui" }}>
                                 <div style={{ position:"relative" }}>
                                   <Avatar src={u.photoURL} name={u.displayName} size={20} />
-                                  <div style={{ position:"absolute", bottom:-1, right:-1, width:6, height:6, borderRadius:"50%", background:statusColor(u), border:"1.5px solid #161b27" }} />
+                                  <div style={{ position:"absolute", bottom:-1, right:-1, width:6, height:6, borderRadius:"50%", background:statusColor(u), border:"1.5px solid var(--bg2)" }} />
                                 </div>
                                 <span style={{ fontSize:12, color:"#4f7ef7", fontWeight:500 }}>{name}</span>
                               </button>
                             ) : (
                               <span key={name}
-                                style={{ fontSize:12, color:"#8b92a8", background:"#1e2535", border:"1px solid rgba(255,255,255,0.07)", borderRadius:20, padding:"3px 10px" }}>
+                                style={{ fontSize:12, color:"var(--text2)", background:"var(--bg3)", border:"1px solid var(--border)", borderRadius:20, padding:"3px 10px" }}>
                                 {name}
                               </span>
                             )
@@ -189,24 +189,24 @@ export default function MeetingsPage() {
       {selected && !showReport && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:100 }}
           onClick={() => setSelected(null)}>
-          <div style={{ background:"#161b27", border:"1px solid rgba(255,255,255,0.12)", borderRadius:16, padding:28, width:380, maxWidth:"90vw", textAlign:"center" }}
+          <div style={{ background:"var(--bg2)", border:"1px solid var(--border2)", borderRadius:16, padding:28, width:380, maxWidth:"90vw", textAlign:"center" }}
             onClick={e => e.stopPropagation()}>
             <div style={{ position:"relative", display:"inline-block", marginBottom:14 }}>
               <Avatar src={selected.photoURL} name={selected.displayName} size={72} />
-              <div style={{ position:"absolute", bottom:2, right:2, width:14, height:14, borderRadius:"50%", background:statusColor(selected), border:"3px solid #161b27" }} />
+              <div style={{ position:"absolute", bottom:2, right:2, width:14, height:14, borderRadius:"50%", background:statusColor(selected), border:"3px solid var(--bg2)" }} />
             </div>
             <div style={{ fontWeight:600, fontSize:18, marginBottom:3 }}>{selected.displayName}</div>
-            <div style={{ fontSize:12, color:"#8b92a8", marginBottom:2 }}>{selected.role}</div>
-            {selected.title && <div style={{ fontSize:12, color:"#545d75", marginBottom:8 }}>{selected.title}</div>}
-            <div style={{ fontSize:12, color:"#545d75", marginBottom:14 }}>
+            <div style={{ fontSize:12, color:"var(--text2)", marginBottom:2 }}>{selected.role}</div>
+            {selected.title && <div style={{ fontSize:12, color:"var(--text3)", marginBottom:8 }}>{selected.title}</div>}
+            <div style={{ fontSize:12, color:"var(--text3)", marginBottom:14 }}>
               {selected.online ? "🟢 Paikalla" : `Viimeksi: ${formatLastSeen(selected.lastSeen)}`}
             </div>
             {selected.bio && (
-              <p style={{ fontSize:13, color:"#8b92a8", lineHeight:1.6, background:"#1e2535", padding:"10px 14px", borderRadius:8, margin:"0 0 16px", textAlign:"left" }}>
+              <p style={{ fontSize:13, color:"var(--text2)", lineHeight:1.6, background:"var(--bg3)", padding:"10px 14px", borderRadius:8, margin:"0 0 16px", textAlign:"left" }}>
                 {selected.bio}
               </p>
             )}
-            {selected.phone && <div style={{ fontSize:13, color:"#545d75", marginBottom:16 }}>📞 {selected.phone}</div>}
+            {selected.phone && <div style={{ fontSize:13, color:"var(--text3)", marginBottom:16 }}>📞 {selected.phone}</div>}
             <div style={{ display:"flex", gap:8, justifyContent:"center", flexWrap:"wrap" }}>
               <button onClick={() => setSelected(null)} style={btnGhost}>Sulje</button>
               <button onClick={() => { openDM(selected); setSelected(null) }} style={btnPrimary}>💬 Lähetä viesti</button>
@@ -225,16 +225,16 @@ export default function MeetingsPage() {
       {selected && showReport && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:110 }}
           onClick={() => setShowReport(false)}>
-          <div style={{ background:"#161b27", border:"1px solid rgba(255,255,255,0.12)", borderRadius:16, padding:24, width:400, maxWidth:"90vw" }}
+          <div style={{ background:"var(--bg2)", border:"1px solid var(--border2)", borderRadius:16, padding:24, width:400, maxWidth:"90vw" }}
             onClick={e => e.stopPropagation()}>
             <h3 style={{ margin:"0 0 6px", fontSize:16 }}>🚩 Raportoi: {selected.displayName}</h3>
-            <p style={{ fontSize:12, color:"#545d75", margin:"0 0 16px" }}>Raportti menee hallintapaneeliin admineille.</p>
+            <p style={{ fontSize:12, color:"var(--text3)", margin:"0 0 16px" }}>Raportti menee hallintapaneeliin admineille.</p>
             {reportSent
               ? <div style={{ textAlign:"center", padding:20, color:"#22c55e" }}>✓ Lähetetty!</div>
               : <>
                   <textarea value={reportReason} onChange={e => setReportReason(e.target.value)}
                     placeholder="Kuvaile ongelma..." rows={4}
-                    style={{ width:"100%", background:"#1e2535", border:"1px solid rgba(255,255,255,0.1)", borderRadius:8, padding:"9px 12px", color:"#e8eaf0", fontSize:14, fontFamily:"system-ui", resize:"none", outline:"none", boxSizing:"border-box" }} />
+                    style={{ width:"100%", background:"var(--bg3)", border:"1px solid var(--border2)", borderRadius:8, padding:"9px 12px", color:"var(--text)", fontSize:14, fontFamily:"system-ui", resize:"none", outline:"none", boxSizing:"border-box" }} />
                   <div style={{ display:"flex", gap:8, justifyContent:"flex-end", marginTop:12 }}>
                     <button onClick={() => setShowReport(false)} style={btnGhost}>Peruuta</button>
                     <button onClick={sendReport}
@@ -252,13 +252,13 @@ export default function MeetingsPage() {
       {selectedGroup && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:120 }}
           onClick={() => setSelectedGroup(null)}>
-          <div style={{ background:"#161b27", border:"1px solid rgba(255,255,255,0.12)", borderRadius:16, padding:24, width:500, maxWidth:"90vw", maxHeight:"80vh", overflowY:"auto" }}
+          <div style={{ background:"var(--bg2)", border:"1px solid var(--border2)", borderRadius:16, padding:24, width:500, maxWidth:"90vw", maxHeight:"80vh", overflowY:"auto" }}
             onClick={e => e.stopPropagation()}>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
               <h3 style={{ margin:0, fontSize:16, color:selectedGroup.color }}>{selectedGroup.name}</h3>
-              <button onClick={() => setSelectedGroup(null)} style={{ background:"transparent", border:"none", color:"#8b92a8", cursor:"pointer", fontSize:18 }}>✕</button>
+              <button onClick={() => setSelectedGroup(null)} style={{ background:"transparent", border:"none", color:"var(--text2)", cursor:"pointer", fontSize:18 }}>✕</button>
             </div>
-            <div style={{ fontSize:13, color:"#8b92a8", lineHeight:1.6, marginBottom:20 }}>
+            <div style={{ fontSize:13, color:"var(--text2)", lineHeight:1.6, marginBottom:20 }}>
               <p><strong>Kategoria:</strong> {selectedGroup.category}</p>
               <p><strong>Vuosi:</strong> {selectedGroup.year}</p>
               {selectedGroup.day && <p><strong>Aika:</strong> {selectedGroup.day.charAt(0).toUpperCase()+selectedGroup.day.slice(1)} {selectedGroup.time}</p>}
@@ -276,12 +276,12 @@ export default function MeetingsPage() {
                         style={{ display:"flex", alignItems:"center", gap:5, background:"rgba(79,126,247,0.1)", border:"1px solid rgba(79,126,247,0.25)", borderRadius:20, padding:"3px 10px 3px 4px", cursor:"pointer", fontFamily:"system-ui" }}>
                         <div style={{ position:"relative" }}>
                           <Avatar src={u.photoURL} name={u.displayName} size={20} />
-                          <div style={{ position:"absolute", bottom:-1, right:-1, width:6, height:6, borderRadius:"50%", background:statusColor(u), border:"1.5px solid #161b27" }} />
+                          <div style={{ position:"absolute", bottom:-1, right:-1, width:6, height:6, borderRadius:"50%", background:statusColor(u), border:"1.5px solid var(--bg2)" }} />
                         </div>
                         <span style={{ fontSize:12, color:"#4f7ef7", fontWeight:500 }}>{name}</span>
                       </button>
                     ) : (
-                      <span key={name} style={{ fontSize:12, color:"#8b92a8", background:"#1e2535", border:"1px solid rgba(255,255,255,0.07)", borderRadius:20, padding:"3px 10px" }}>
+                      <span key={name} style={{ fontSize:12, color:"var(--text2)", background:"var(--bg3)", border:"1px solid var(--border)", borderRadius:20, padding:"3px 10px" }}>
                         {name}
                       </span>
                     )
@@ -299,4 +299,4 @@ export default function MeetingsPage() {
 }
 
 const btnPrimary = { background:"#4f7ef7", border:"none", borderRadius:8, color:"#fff", padding:"8px 16px", cursor:"pointer", fontSize:13, fontWeight:500, fontFamily:"system-ui" }
-const btnGhost   = { background:"transparent", border:"1px solid rgba(255,255,255,0.15)", borderRadius:8, color:"#8b92a8", padding:"8px 16px", cursor:"pointer", fontSize:13, fontFamily:"system-ui" }
+const btnGhost   = { background:"transparent", border:"1px solid var(--border2)", borderRadius:8, color:"var(--text2)", padding:"8px 16px", cursor:"pointer", fontSize:13, fontFamily:"system-ui" }

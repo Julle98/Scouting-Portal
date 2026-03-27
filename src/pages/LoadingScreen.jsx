@@ -1,7 +1,7 @@
 // src/pages/LoadingScreen.jsx
 export default function LoadingScreen({ message = "Ladataan..." }) {
   return (
-    <div style={{ position:"fixed", inset:0, background:"#0e1117", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", zIndex:999, fontFamily:"system-ui" }}>
+    <div style={{ position:"fixed", inset:0, background:"var(--bg)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", zIndex:999, fontFamily:"system-ui" }}>
       <div style={{ marginBottom:28, position:"relative", width:64, height:64 }}>
         <img src="/favicon.png" alt="logo"
           style={{ width:48, height:48, objectFit:"contain", position:"absolute", top:"50%", left:"50%", transform:"translate(-50%,-50%)" }}
@@ -12,8 +12,8 @@ export default function LoadingScreen({ message = "Ladataan..." }) {
             strokeDasharray="44 132" strokeLinecap="round" />
         </svg>
       </div>
-      <div style={{ fontSize:14, color:"#8b92a8", fontWeight:500 }}>{message}</div>
-      <div style={{ fontSize:11, color:"#545d75", marginTop:6 }}>Maahiset-portaali</div>
+      <div style={{ fontSize:14, color:"var(--text2)", fontWeight:500 }}>{message}</div>
+      <div style={{ fontSize:11, color:"var(--text3)", marginTop:6 }}>Maahiset-portaali</div>
       <style>{`@keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }`}</style>
     </div>
   )

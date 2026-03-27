@@ -29,14 +29,14 @@ export function LinkWarningModal({ pending, onClose }) {
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:500 }}
       onClick={onClose}>
-      <div style={{ background:"#161b27", border:"1px solid rgba(255,255,255,0.12)", borderRadius:16, padding:28, width:380, maxWidth:"90vw" }}
+      <div style={{ background:"var(--bg2)", border:"1px solid var(--border2)", borderRadius:16, padding:28, width:380, maxWidth:"90vw" }}
         onClick={e => e.stopPropagation()}>
         <div style={{ fontSize:28, textAlign:"center", marginBottom:12 }}>🔗</div>
         <h3 style={{ textAlign:"center", margin:"0 0 8px", fontSize:16, fontWeight:600 }}>Ulkoinen linkki</h3>
-        <p style={{ fontSize:13, color:"#8b92a8", textAlign:"center", margin:"0 0 16px", lineHeight:1.5 }}>
+        <p style={{ fontSize:13, color:"var(--text2)", textAlign:"center", margin:"0 0 16px", lineHeight:1.5 }}>
           Tämä linkki vie sivustolle:
         </p>
-        <div style={{ background:"#1e2535", border:"1px solid rgba(255,255,255,0.1)", borderRadius:8, padding:"8px 14px", marginBottom:20, fontSize:13, color:"#4f7ef7", wordBreak:"break-all", textAlign:"center" }}>
+        <div style={{ background:"var(--bg3)", border:"1px solid var(--border2)", borderRadius:8, padding:"8px 14px", marginBottom:20, fontSize:13, color:"#4f7ef7", wordBreak:"break-all", textAlign:"center" }}>
           {pending.url}
         </div>
         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
@@ -49,7 +49,7 @@ export function LinkWarningModal({ pending, onClose }) {
             Luotan tähän sivustoon — älä kysy uudelleen
           </button>
           <button onClick={onClose}
-            style={{ width:"100%", padding:"10px", background:"transparent", border:"1px solid rgba(255,255,255,0.1)", borderRadius:8, color:"#8b92a8", fontSize:13, cursor:"pointer", fontFamily:"system-ui" }}>
+            style={{ width:"100%", padding:"10px", background:"transparent", border:"1px solid var(--border2)", borderRadius:8, color:"var(--text2)", fontSize:13, cursor:"pointer", fontFamily:"system-ui" }}>
             Peruuta
           </button>
         </div>

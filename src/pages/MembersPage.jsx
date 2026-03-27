@@ -78,7 +78,7 @@ export default function MembersPage() {
   }
 
   function statusColor(m) {
-    return m.status==="away"?"#f59e0b":m.status==="busy"?"#ef4444":m.status==="offline"?"#545d75":m.online?"#22c55e":"#545d75"
+    return m.status==="away"?"#f59e0b":m.status==="busy"?"#ef4444":m.status==="offline"?"var(--text3)":m.online?"#22c55e":"var(--text3)"
   }
   function statusLabel(m) {
     return m.status==="away"?"🟡 Poissa":m.status==="busy"?"🔴 Älä häiritse":m.status==="offline"?"⚫ Offline":m.online?"🟢 Paikalla":("Viimeksi: "+formatLastSeen(m.lastSeen))
@@ -108,36 +108,36 @@ export default function MembersPage() {
           { label:"⚫ Offline", list: offline },
         ].map(({ label, list }) => list.length > 0 && (
           <div key={label} style={{ marginBottom:24 }}>
-            <div style={{ fontSize:11, fontWeight:600, color:"#545d75", letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:10 }}>
+            <div style={{ fontSize:11, fontWeight:600, color:"var(--text3)", letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:10 }}>
               {label} — {list.length}
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))", gap:12 }}>
               {list.map(m => (
                 <div key={m.id} onClick={() => setSelected(m)}
-                  style={{ background:"#161b27", border:"1px solid rgba(255,255,255,0.07)", borderRadius:14, padding:16, display:"flex", gap:14, alignItems:"flex-start", cursor:"pointer", transition:"border-color 0.15s", position:"relative" }}
-                  onMouseEnter={e => e.currentTarget.style.borderColor="rgba(255,255,255,0.15)"}
-                  onMouseLeave={e => e.currentTarget.style.borderColor="rgba(255,255,255,0.07)"}>
+                  style={{ background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:14, padding:16, display:"flex", gap:14, alignItems:"flex-start", cursor:"pointer", transition:"border-color 0.15s", position:"relative" }}
+                  onMouseEnter={e => e.currentTarget.style.borderColor="var(--border2)"}
+                  onMouseLeave={e => e.currentTarget.style.borderColor="var(--border)"}>
                   <div style={{ position:"relative", flexShrink:0 }}>
                     <Avatar src={m.photoURL} name={m.displayName} size={46} />
-                    <div style={{ position:"absolute", bottom:0, right:0, width:11, height:11, borderRadius:"50%", background:statusColor(m), border:"2px solid #161b27" }} />
+                    <div style={{ position:"absolute", bottom:0, right:0, width:11, height:11, borderRadius:"50%", background:statusColor(m), border:"2px solid var(--bg2)" }} />
                   </div>
                   <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ fontWeight:600, fontSize:14, marginBottom:2 }}>
                       {m.displayName}
-                      {m.id===user.uid && <span style={{ fontSize:10, color:"#545d75", marginLeft:5 }}>(sinä)</span>}
+                      {m.id===user.uid && <span style={{ fontSize:10, color:"var(--text3)", marginLeft:5 }}>(sinä)</span>}
                     </div>
                     <div style={{ display:"flex", alignItems:"center", gap:5, marginBottom:3 }}>
-                      <span style={{ fontSize:11, fontWeight:500, color: ROLE_COLORS[m.role]||"#8b92a8" }}>{m.role}</span>
+                      <span style={{ fontSize:11, fontWeight:500, color: ROLE_COLORS[m.role]||"var(--text2)" }}>{m.role}</span>
                       {/* Roolin vaihtopainike — kaikille näkyvä */}
                       <button
                         onClick={e => { e.stopPropagation(); setRoleTarget(m); setPendingRole(m.role||"johtaja") }}
                         title="Vaihda rooli"
-                        style={{ background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:4, color:"#545d75", cursor:"pointer", fontSize:11, padding:"0px 5px", lineHeight:"16px", fontFamily:"system-ui" }}>
+                        style={{ background:"rgba(255,255,255,0.06)", border:"1px solid var(--border2)", borderRadius:4, color:"var(--text3)", cursor:"pointer", fontSize:11, padding:"0px 5px", lineHeight:"16px", fontFamily:"system-ui" }}>
                         ＋
                       </button>
                     </div>
-                    {m.title && <div style={{ fontSize:11, color:"#545d75", marginBottom:2 }}>{m.title}</div>}
-                    <div style={{ fontSize:11, color:"#545d75" }}>{statusLabel(m)}</div>
+                    {m.title && <div style={{ fontSize:11, color:"var(--text3)", marginBottom:2 }}>{m.title}</div>}
+                    <div style={{ fontSize:11, color:"var(--text3)" }}>{statusLabel(m)}</div>
                   </div>
 
                 </div>
@@ -151,20 +151,20 @@ export default function MembersPage() {
       {selected && !showReport && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:100 }}
           onClick={() => setSelected(null)}>
-          <div style={{ background:"#161b27", border:"1px solid rgba(255,255,255,0.12)", borderRadius:16, padding:28, width:380, maxWidth:"90vw", textAlign:"center" }}
+          <div style={{ background:"var(--bg2)", border:"1px solid var(--border2)", borderRadius:16, padding:28, width:380, maxWidth:"90vw", textAlign:"center" }}
             onClick={e => e.stopPropagation()}>
             <div style={{ position:"relative", display:"inline-block", marginBottom:14 }}>
               <Avatar src={selected.photoURL} name={selected.displayName} size={72} />
-              <div style={{ position:"absolute", bottom:2, right:2, width:14, height:14, borderRadius:"50%", background:statusColor(selected), border:"3px solid #161b27" }} />
+              <div style={{ position:"absolute", bottom:2, right:2, width:14, height:14, borderRadius:"50%", background:statusColor(selected), border:"3px solid var(--bg2)" }} />
             </div>
             <div style={{ fontWeight:600, fontSize:18, marginBottom:3 }}>{selected.displayName}</div>
-            <div style={{ fontSize:12, color: ROLE_COLORS[selected.role]||"#8b92a8", fontWeight:500, marginBottom:3 }}>{selected.role}</div>
-            {selected.title && <div style={{ fontSize:12, color:"#545d75", marginBottom:8 }}>{selected.title}</div>}
-            <div style={{ fontSize:12, color:"#545d75", marginBottom:14 }}>{statusLabel(selected)}</div>
+            <div style={{ fontSize:12, color: ROLE_COLORS[selected.role]||"var(--text2)", fontWeight:500, marginBottom:3 }}>{selected.role}</div>
+            {selected.title && <div style={{ fontSize:12, color:"var(--text3)", marginBottom:8 }}>{selected.title}</div>}
+            <div style={{ fontSize:12, color:"var(--text3)", marginBottom:14 }}>{statusLabel(selected)}</div>
             {selected.bio && (
-              <p style={{ fontSize:13, color:"#8b92a8", lineHeight:1.6, background:"#1e2535", padding:"10px 14px", borderRadius:8, margin:"0 0 16px", textAlign:"left" }}>{selected.bio}</p>
+              <p style={{ fontSize:13, color:"var(--text2)", lineHeight:1.6, background:"var(--bg3)", padding:"10px 14px", borderRadius:8, margin:"0 0 16px", textAlign:"left" }}>{selected.bio}</p>
             )}
-            {selected.phone && <div style={{ fontSize:13, color:"#545d75", marginBottom:16 }}>📞 {selected.phone}</div>}
+            {selected.phone && <div style={{ fontSize:13, color:"var(--text3)", marginBottom:16 }}>📞 {selected.phone}</div>}
             <div style={{ display:"flex", gap:8, justifyContent:"center", flexWrap:"wrap" }}>
               <button onClick={() => setSelected(null)} style={btnGhost}>Sulje</button>
               <button onClick={() => { openDM(selected); setSelected(null) }} style={btnPrimary}>
@@ -185,16 +185,16 @@ export default function MembersPage() {
       {selected && showReport && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:110 }}
           onClick={() => setShowReport(false)}>
-          <div style={{ background:"#161b27", border:"1px solid rgba(255,255,255,0.12)", borderRadius:16, padding:24, width:400, maxWidth:"90vw" }}
+          <div style={{ background:"var(--bg2)", border:"1px solid var(--border2)", borderRadius:16, padding:24, width:400, maxWidth:"90vw" }}
             onClick={e => e.stopPropagation()}>
             <h3 style={{ margin:"0 0 6px", fontSize:16 }}>🚩 Raportoi: {selected.displayName}</h3>
-            <p style={{ fontSize:12, color:"#545d75", margin:"0 0 16px", lineHeight:1.5 }}>Raportti menee hallintapaneeliin admineille.</p>
+            <p style={{ fontSize:12, color:"var(--text3)", margin:"0 0 16px", lineHeight:1.5 }}>Raportti menee hallintapaneeliin admineille.</p>
             {reportSent
               ? <div style={{ textAlign:"center", padding:20, color:"#22c55e", fontSize:14 }}>✓ Raportti lähetetty!</div>
               : <>
                   <textarea value={reportReason} onChange={e => setReportReason(e.target.value)}
                     placeholder="Kuvaile ongelma lyhyesti..." rows={4}
-                    style={{ width:"100%", background:"#1e2535", border:"1px solid rgba(255,255,255,0.1)", borderRadius:8, padding:"9px 12px", color:"#e8eaf0", fontSize:14, fontFamily:"system-ui", resize:"none", outline:"none", boxSizing:"border-box" }} />
+                    style={{ width:"100%", background:"var(--bg3)", border:"1px solid var(--border2)", borderRadius:8, padding:"9px 12px", color:"var(--text)", fontSize:14, fontFamily:"system-ui", resize:"none", outline:"none", boxSizing:"border-box" }} />
                   <div style={{ display:"flex", gap:8, justifyContent:"flex-end", marginTop:12 }}>
                     <button onClick={() => setShowReport(false)} style={btnGhost}>Peruuta</button>
                     <button onClick={sendReport}
@@ -212,19 +212,19 @@ export default function MembersPage() {
       {roleTarget && !roleConfirm && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:120 }}
           onClick={() => setRoleTarget(null)}>
-          <div style={{ background:"#161b27", border:"1px solid rgba(255,255,255,0.12)", borderRadius:16, padding:24, width:360, maxWidth:"90vw" }}
+          <div style={{ background:"var(--bg2)", border:"1px solid var(--border2)", borderRadius:16, padding:24, width:360, maxWidth:"90vw" }}
             onClick={e => e.stopPropagation()}>
             <h3 style={{ margin:"0 0 6px", fontSize:16 }}>Vaihda rooli</h3>
-            <p style={{ fontSize:13, color:"#8b92a8", margin:"0 0 16px" }}>
-              Henkilö: <strong style={{ color:"#e8eaf0" }}>{roleTarget.displayName}</strong>
+            <p style={{ fontSize:13, color:"var(--text2)", margin:"0 0 16px" }}>
+              Henkilö: <strong style={{ color:"var(--text)" }}>{roleTarget.displayName}</strong>
             </p>
             <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:20 }}>
               {roles.map(r => (
                 <button key={r} onClick={() => setPendingRole(r)}
                   style={{ padding:"10px 14px", borderRadius:8, cursor:"pointer", fontFamily:"system-ui", fontSize:13, textAlign:"left",
-                    border: pendingRole===r ? `1px solid ${ROLE_COLORS[r]||"#4f7ef7"}` : "1px solid rgba(255,255,255,0.08)",
-                    background: pendingRole===r ? `${ROLE_COLORS[r]||"#4f7ef7"}18` : "#1e2535",
-                    color: pendingRole===r ? (ROLE_COLORS[r]||"#4f7ef7") : "#8b92a8",
+                    border: pendingRole===r ? `1px solid ${ROLE_COLORS[r]||"#4f7ef7"}` : "1px solid var(--border)",
+                    background: pendingRole===r ? `${ROLE_COLORS[r]||"#4f7ef7"}18` : "var(--bg3)",
+                    color: pendingRole===r ? (ROLE_COLORS[r]||"#4f7ef7") : "var(--text2)",
                     display:"flex", alignItems:"center", justifyContent:"space-between" }}>
                   {r}
                   {pendingRole===r && <span style={{ fontSize:14 }}>✓</span>}
@@ -246,13 +246,13 @@ export default function MembersPage() {
       {roleTarget && roleConfirm && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:130 }}
           onClick={() => setRoleConfirm(false)}>
-          <div style={{ background:"#161b27", border:"1px solid rgba(255,255,255,0.12)", borderRadius:16, padding:24, width:360, maxWidth:"90vw", textAlign:"center" }}
+          <div style={{ background:"var(--bg2)", border:"1px solid var(--border2)", borderRadius:16, padding:24, width:360, maxWidth:"90vw", textAlign:"center" }}
             onClick={e => e.stopPropagation()}>
             <div style={{ fontSize:36, marginBottom:12 }}>🔄</div>
             <h3 style={{ margin:"0 0 12px", fontSize:16 }}>Vahvista roolimuutos</h3>
-            <p style={{ fontSize:13, color:"#8b92a8", lineHeight:1.6, margin:"0 0 20px" }}>
-              Vaihdetaan <strong style={{ color:"#e8eaf0" }}>{roleTarget.displayName}</strong> rooliksi:<br/>
-              <span style={{ color:"#545d75", textDecoration:"line-through" }}>{roleTarget.role}</span>
+            <p style={{ fontSize:13, color:"var(--text2)", lineHeight:1.6, margin:"0 0 20px" }}>
+              Vaihdetaan <strong style={{ color:"var(--text)" }}>{roleTarget.displayName}</strong> rooliksi:<br/>
+              <span style={{ color:"var(--text3)", textDecoration:"line-through" }}>{roleTarget.role}</span>
               {" → "}
               <strong style={{ color: ROLE_COLORS[pendingRole]||"#4f7ef7" }}>{pendingRole}</strong>
             </p>
@@ -268,4 +268,4 @@ export default function MembersPage() {
 }
 
 const btnPrimary = { background:"#4f7ef7", border:"none", borderRadius:8, color:"#fff", padding:"8px 16px", cursor:"pointer", fontSize:13, fontWeight:500, fontFamily:"system-ui" }
-const btnGhost   = { background:"transparent", border:"1px solid rgba(255,255,255,0.15)", borderRadius:8, color:"#8b92a8", padding:"8px 16px", cursor:"pointer", fontSize:13, fontFamily:"system-ui" }
+const btnGhost   = { background:"transparent", border:"1px solid var(--border2)", borderRadius:8, color:"var(--text2)", padding:"8px 16px", cursor:"pointer", fontSize:13, fontFamily:"system-ui" }

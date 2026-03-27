@@ -5,7 +5,7 @@ import { useAuth } from "../contexts/AuthContext";
 const VERSION = import.meta.env.VITE_VERSION;
 const authorName = import.meta.env.VITE_AUTHOR_NAME;
 const authorLink = import.meta.env.VITE_AUTHOR_LINK;
-const LAST_PROMPTED_UPDATE_KEY = import.meta.env.VITE_LAST_PROMPTED_UPDATE_KEY;
+const LAST_PROMPTED_UPDATE_KEY = "lastPromptedUpdateVersion";
 
 // Teema-asetukset CSS-muuttujilla
 const THEMES = {
@@ -13,9 +13,9 @@ const THEMES = {
     "--bg":       "#0e1117",
     "--bg2":      "#161b27",
     "--bg3":      "#1e2535",
-    "--text":     "#e8eaf0",
-    "--text2":    "#8b92a8",
-    "--text3":    "#545d75",
+    "--text":     "#d7deea",
+    "--text2":    "#a7b2c8",
+    "--text3":    "#74809a",
     "--border":   "rgba(255,255,255,0.07)",
     "--border2":  "rgba(255,255,255,0.12)",
   },
@@ -156,9 +156,9 @@ export default function SettingsPage() {
   const themeBtn = (val, label) => (
     <button onClick={() => handleTheme(val)}
       style={{ padding:"8px 16px", borderRadius:8, cursor:"pointer", fontFamily:"system-ui", fontSize:13,
-        border:      theme===val ? "1px solid #4f7ef7" : "1px solid rgba(255,255,255,0.1)",
+        border:      theme===val ? "1px solid #4f7ef7" : "1px solid var(--border2)",
         background:  theme===val ? "rgba(79,126,247,0.15)" : "transparent",
-        color:       theme===val ? "#4f7ef7" : "#8b92a8" }}>
+        color:       theme===val ? "#4f7ef7" : "var(--text2)" }}>
       {label}
     </button>
   )
@@ -176,7 +176,7 @@ export default function SettingsPage() {
             {themeBtn("light", "☀️ Vaalea")}
             {themeBtn("auto",  "💻 Automaattinen")}
           </div>
-          <p style={{ fontSize:12, color:"#545d75", margin:"8px 0 0", lineHeight:1.5 }}>
+          <p style={{ fontSize:12, color:"var(--text3)", margin:"8px 0 0", lineHeight:1.5 }}>
             Automaattinen seuraa tietokoneen asetuksia.
           </p>
         </Section>
@@ -188,15 +188,15 @@ export default function SettingsPage() {
               <input type="checkbox" id="condensed" checked={condensedChat}
                 onChange={e => setCondensedChat(e.target.checked)}
                 style={{ marginTop:3, cursor:"pointer", accentColor:"#4f7ef7" }} />
-              <label htmlFor="condensed" style={{ fontSize:13, color:"#8b92a8", cursor:"pointer", lineHeight:1.5 }}>
+              <label htmlFor="condensed" style={{ fontSize:13, color:"var(--text2)", cursor:"pointer", lineHeight:1.5 }}>
                 <strong style={{ color:"var(--text, #e8eaf0)" }}>Tiivistetty näkymä</strong><br/>
                 Piilottaa profiilikuvat viesteistä ja tiivistää rivivälin
               </label>
             </div>
             <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-              <label style={{ fontSize:13, color:"#8b92a8", flexShrink:0 }}>Kanavien järjestys:</label>
+              <label style={{ fontSize:13, color:"var(--text2)", flexShrink:0 }}>Kanavien järjestys:</label>
               <select value={chatOrder} onChange={e => setChatOrder(e.target.value)}
-                style={{ background:"#1e2535", border:"1px solid rgba(255,255,255,0.1)", borderRadius:6, padding:"6px 10px", color:"var(--text, #e8eaf0)", fontSize:13, fontFamily:"system-ui", outline:"none", cursor:"pointer" }}>
+                style={{ background:"var(--bg3)", border:"1px solid var(--border2)", borderRadius:6, padding:"6px 10px", color:"var(--text)", fontSize:13, fontFamily:"system-ui", outline:"none", cursor:"pointer" }}>
                 <option value="default">Oletus (aakkosjärjestys)</option>
                 <option value="activity">Aktiivisuuden mukaan</option>
                 <option value="unread">Lukemattomat ensin</option>
@@ -213,10 +213,10 @@ export default function SettingsPage() {
         <Section title="ℹ️ Sovellus">
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:10 }}>
             <div>
-              <div style={{ fontSize:13, color:"#8b92a8" }}>
+              <div style={{ fontSize:13, color:"var(--text2)" }}>
                 Versio <strong style={{ color:"var(--text, #e8eaf0)" }}>{currentVersion}</strong>
               </div>
-                <div style={{ fontSize:12, color:"#545d75", marginTop:3 }}>
+                <div style={{ fontSize:12, color:"var(--text3)", marginTop:3 }}>
                 Sivuston tekijä:{" "}
                 <a href={authorLink} target="_blank" rel="noopener noreferrer">
                   {authorName}
@@ -225,7 +225,7 @@ export default function SettingsPage() {
             </div>
             <div style={{ display:"flex", gap:8 }}>
               <button onClick={() => setShowChangelog(true)}
-                style={{ padding:"7px 14px", background:"transparent", border:"1px solid rgba(255,255,255,0.1)", borderRadius:8, color:"#8b92a8", cursor:"pointer", fontSize:12, fontFamily:"system-ui" }}>
+                style={{ padding:"7px 14px", background:"transparent", border:"1px solid var(--border2)", borderRadius:8, color:"var(--text2)", cursor:"pointer", fontSize:12, fontFamily:"system-ui" }}>
                 📋 Päivityshistoria
               </button>
               <button onClick={checkForUpdates} disabled={checking}
@@ -257,25 +257,25 @@ export default function SettingsPage() {
       {showChangelog && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:200 }}
           onClick={() => setShowChangelog(false)}>
-          <div style={{ background:"#161b27", border:"1px solid rgba(255,255,255,0.12)", borderRadius:16, padding:28, width:500, maxWidth:"90vw", maxHeight:"80vh", overflowY:"auto" }}
+          <div style={{ background:"var(--bg2)", border:"1px solid var(--border2)", borderRadius:16, padding:28, width:500, maxWidth:"90vw", maxHeight:"80vh", overflowY:"auto" }}
             onClick={e => e.stopPropagation()}>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20 }}>
               <h3 style={{ margin:0, fontSize:16 }}>📋 Päivityshistoria</h3>
               <button onClick={() => setShowChangelog(false)}
-                style={{ background:"transparent", border:"none", color:"#8b92a8", cursor:"pointer", fontSize:18 }}>✕</button>
+                style={{ background:"transparent", border:"none", color:"var(--text2)", cursor:"pointer", fontSize:18 }}>✕</button>
             </div>
             {changelogData.map(entry => (
               <div key={entry.version} style={{ marginBottom:24 }}>
                 <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
-                  <span style={{ fontWeight:600, fontSize:14, color:"#e8eaf0" }}>v{entry.version}</span>
+                  <span style={{ fontWeight:600, fontSize:14, color:"var(--text)" }}>v{entry.version}</span>
                   {compareVersions(entry.version, currentVersion) === 0 && (
                     <span style={{ fontSize:10, background:"rgba(34,197,94,0.15)", color:"#22c55e", border:"1px solid rgba(34,197,94,0.3)", padding:"1px 7px", borderRadius:10 }}>Nykyinen</span>
                   )}
-                  <span style={{ fontSize:12, color:"#545d75" }}>{entry.date}</span>
+                  <span style={{ fontSize:12, color:"var(--text3)" }}>{entry.date}</span>
                 </div>
                 <ul style={{ margin:0, paddingLeft:18, display:"flex", flexDirection:"column", gap:5 }}>
                   {entry.items.map((item, i) => (
-                    <li key={i} style={{ fontSize:13, color:"#8b92a8", lineHeight:1.5 }}>{item}</li>
+                    <li key={i} style={{ fontSize:13, color:"var(--text2)", lineHeight:1.5 }}>{item}</li>
                   ))}
                 </ul>
               </div>
@@ -293,11 +293,11 @@ export default function SettingsPage() {
 
 function Section({ title, children }) {
   return (
-    <div style={{ background:"#161b27", border:"1px solid rgba(255,255,255,0.07)", borderRadius:12, padding:20, marginBottom:16 }}>
+    <div style={{ background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:12, padding:20, marginBottom:16 }}>
       <div style={{ fontSize:14, fontWeight:600, marginBottom:16, color:"var(--text, #e8eaf0)" }}>{title}</div>
       {children}
     </div>
   )
 }
 
-const lbl = { display:"block", fontSize:12, fontWeight:500, color:"#8b92a8", marginBottom:8 }
+const lbl = { display:"block", fontSize:12, fontWeight:500, color:"var(--text2)", marginBottom:8 }

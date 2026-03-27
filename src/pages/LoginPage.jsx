@@ -17,22 +17,22 @@ function TermsModal({ type, onClose }) {
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.8)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:500 }}
       onClick={onClose}>
-      <div style={{ background:"#161b27", border:"1px solid rgba(255,255,255,0.12)", borderRadius:16, padding:28, width:460, maxWidth:"90vw", maxHeight:"75vh", overflowY:"auto", fontFamily:"system-ui" }}
+      <div style={{ background:"var(--bg2)", border:"1px solid var(--border2)", borderRadius:16, padding:28, width:460, maxWidth:"90vw", maxHeight:"75vh", overflowY:"auto", fontFamily:"system-ui" }}
         onClick={e => e.stopPropagation()}>
-        <h3 style={{ margin:"0 0 16px", fontSize:16, color:"#e8eaf0" }}>
+        <h3 style={{ margin:"0 0 16px", fontSize:16, color:"var(--text)" }}>
           {type === "terms" ? "📋 Käyttöehdot" : "🔐 Tietosuojakäytäntö"}
         </h3>
         {type === "terms" ? (
-          <div style={{ fontSize:13, color:"#8b92a8", lineHeight:1.8 }}>
-            <p><strong style={{ color:"#e8eaf0" }}>1. Sovelluksen käyttö</strong><br/>Partio-portaali on tarkoitettu Maahiset-lippukunnan johtajien sisäiseen käyttöön.</p>
-            <p><strong style={{ color:"#e8eaf0" }}>2. Käyttäytyminen</strong><br/>Käyttäjät sitoutuvat asialliseen käytökseen. Häirintä tai asiattomat viestit voivat johtaa käyttöoikeuden poistoon.</p>
-            <p><strong style={{ color:"#e8eaf0" }}>3. Sisältö</strong><br/>Käyttäjä vastaa lähettämästään sisällöstä. Laitonta sisältöä ei sallita.</p>
+          <div style={{ fontSize:13, color:"var(--text2)", lineHeight:1.8 }}>
+            <p><strong style={{ color:"var(--text)" }}>1. Sovelluksen käyttö</strong><br/>Partio-portaali on tarkoitettu Maahiset-lippukunnan johtajien sisäiseen käyttöön.</p>
+            <p><strong style={{ color:"var(--text)" }}>2. Käyttäytyminen</strong><br/>Käyttäjät sitoutuvat asialliseen käytökseen. Häirintä tai asiattomat viestit voivat johtaa käyttöoikeuden poistoon.</p>
+            <p><strong style={{ color:"var(--text)" }}>3. Sisältö</strong><br/>Käyttäjä vastaa lähettämästään sisällöstä. Laitonta sisältöä ei sallita.</p>
           </div>
         ) : (
-          <div style={{ fontSize:13, color:"#8b92a8", lineHeight:1.8 }}>
-            <p><strong style={{ color:"#e8eaf0" }}>Kerättävät tiedot</strong><br/>Tallennamme Google-tilisi nimen, sähköpostin ja profiilikuvan. Lisäksi laitteen yleisiä tietoja.</p>
-            <p><strong style={{ color:"#e8eaf0" }}>Tietojen käyttö</strong><br/>Tietoja käytetään vain sovelluksen toimintaan. Tietoja ei myydä ulkopuolisille.</p>
-            <p><strong style={{ color:"#e8eaf0" }}>Oikeutesi</strong><br/>Voit poistaa tilisi ja tietosi koska tahansa profiiliasetuksista.</p>
+          <div style={{ fontSize:13, color:"var(--text2)", lineHeight:1.8 }}>
+            <p><strong style={{ color:"var(--text)" }}>Kerättävät tiedot</strong><br/>Tallennamme Google-tilisi nimen, sähköpostin ja profiilikuvan. Lisäksi laitteen yleisiä tietoja.</p>
+            <p><strong style={{ color:"var(--text)" }}>Tietojen käyttö</strong><br/>Tietoja käytetään vain sovelluksen toimintaan. Tietoja ei myydä ulkopuolisille.</p>
+            <p><strong style={{ color:"var(--text)" }}>Oikeutesi</strong><br/>Voit poistaa tilisi ja tietosi koska tahansa profiiliasetuksista.</p>
           </div>
         )}
         <button onClick={onClose}
@@ -127,20 +127,20 @@ export default function LoginPage() {
     <div style={s.wrap}>
       <div style={s.card}>
         <div style={{ display:"flex", justifyContent:"center", marginBottom:12 }}>
-          <div style={{ width:64, height:64, background:"#1e2535", borderRadius:14, display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden", border:"1px solid rgba(255,255,255,0.08)" }}>
+          <div style={{ width:64, height:64, background:"var(--bg3)", borderRadius:14, display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden", border:"1px solid var(--border)" }}>
             <img src="/favicon.png" alt="logo" style={{ width:48, height:48, objectFit:"contain" }}
               onError={e => { e.target.style.display="none"; e.target.parentNode.innerHTML="🏕️" }} />
           </div>
         </div>
-        <h1 style={{ fontSize:22, color:"#e8eaf0", fontWeight:600, textAlign:"center", margin:"0 0 4px" }}>Partio-portaali</h1>
-        <p style={{ fontSize:13, color:"#8b92a8", textAlign:"center", margin:"0 0 24px" }}>Maahiset RY | Johtajien sovellus</p>
+        <h1 style={{ fontSize:22, color:"var(--text)", fontWeight:600, textAlign:"center", margin:"0 0 4px" }}>Partio-portaali</h1>
+        <p style={{ fontSize:13, color:"var(--text2)", textAlign:"center", margin:"0 0 24px" }}>Maahiset RY | Johtajien sovellus</p>
 
         {/* Välilehdet */}
-        <div style={{ display:"flex", gap:0, marginBottom:20, background:"#1e2535", borderRadius:10, padding:4 }}>
+        <div style={{ display:"flex", gap:0, marginBottom:20, background:"var(--bg3)", borderRadius:10, padding:4 }}>
           <button onClick={() => { setTab("google"); setError(""); setInfo("") }}
             style={{ flex:1, padding:"8px", borderRadius:8, border:"none", cursor:"pointer", fontFamily:"system-ui", fontSize:13, fontWeight:500, transition:"all 0.15s",
-              background: tab==="google" ? "#161b27" : "transparent",
-              color:      tab==="google" ? "#e8eaf0"  : "#8b92a8" }}>
+              background: tab==="google" ? "var(--bg2)" : "transparent",
+              color:      tab==="google" ? "var(--text)"  : "var(--text2)" }}>
             Google
             {tab === "google" && (
               <span style={{ marginLeft:6, fontSize:10, background:"rgba(79,126,247,0.2)", color:"#4f7ef7", padding:"1px 6px", borderRadius:4 }}>
@@ -150,8 +150,8 @@ export default function LoginPage() {
           </button>
           <button onClick={() => { setTab("email"); setError(""); setInfo("") }}
             style={{ flex:1, padding:"8px", borderRadius:8, border:"none", cursor:"pointer", fontFamily:"system-ui", fontSize:13, fontWeight:500, transition:"all 0.15s",
-              background: tab==="email" ? "#161b27" : "transparent",
-              color:      tab==="email" ? "#e8eaf0"  : "#8b92a8" }}>
+              background: tab==="email" ? "var(--bg2)" : "transparent",
+              color:      tab==="email" ? "var(--text)"  : "var(--text2)" }}>
             Sähköposti
           </button>
         </div>
@@ -168,8 +168,8 @@ export default function LoginPage() {
               </svg>
               Jatka Google-tilillä
             </button>
-            <p style={{ fontSize:11, color:"#545d75", textAlign:"center", marginTop:14, lineHeight:1.5 }}>
-              Kirjaudu <strong style={{ color:"#8b92a8" }}>@{ALLOWED_DOMAIN}</strong> Google-tilillä tai millä tahansa kutsutulla tilillä
+            <p style={{ fontSize:11, color:"var(--text3)", textAlign:"center", marginTop:14, lineHeight:1.5 }}>
+              Kirjaudu <strong style={{ color:"var(--text2)" }}>@{ALLOWED_DOMAIN}</strong> Google-tilillä tai millä tahansa kutsutulla tilillä
             </p>
             {(authError || error) && <div style={s.errBox}>{authError || error}</div>}
           </div>
@@ -179,23 +179,23 @@ export default function LoginPage() {
         {tab === "email" && (
           <div>
             {mode === "login" && (
-              <div style={{ fontSize:12, color:"#545d75", background:"rgba(79,126,247,0.08)", border:"1px solid rgba(79,126,247,0.2)", borderRadius:8, padding:"8px 12px", marginBottom:16, lineHeight:1.5 }}>
+              <div style={{ fontSize:12, color:"var(--text3)", background:"rgba(79,126,247,0.08)", border:"1px solid rgba(79,126,247,0.2)", borderRadius:8, padding:"8px 12px", marginBottom:16, lineHeight:1.5 }}>
                 🔒 Vain <strong style={{ color:"#4f7ef7" }}>@{ALLOWED_DOMAIN}</strong> -osoitteet hyväksytään
               </div>
             )}
 
             {mode !== "reset" && (
-              <div style={{ display:"flex", gap:0, marginBottom:16, background:"#1e2535", borderRadius:8, padding:3 }}>
+              <div style={{ display:"flex", gap:0, marginBottom:16, background:"var(--bg3)", borderRadius:8, padding:3 }}>
                 <button onClick={() => { setMode("login"); setError(""); setInfo("") }}
                   style={{ flex:1, padding:"6px", borderRadius:6, border:"none", cursor:"pointer", fontFamily:"system-ui", fontSize:12,
-                    background: mode==="login" ? "#161b27" : "transparent",
-                    color:      mode==="login" ? "#e8eaf0"  : "#8b92a8" }}>
+                    background: mode==="login" ? "var(--bg2)" : "transparent",
+                    color:      mode==="login" ? "var(--text)"  : "var(--text2)" }}>
                   Kirjaudu sisään
                 </button>
                 <button onClick={() => { setMode("register"); setError(""); setInfo("") }}
                   style={{ flex:1, padding:"6px", borderRadius:6, border:"none", cursor:"pointer", fontFamily:"system-ui", fontSize:12,
-                    background: mode==="register" ? "#161b27" : "transparent",
-                    color:      mode==="register" ? "#e8eaf0"  : "#8b92a8" }}>
+                    background: mode==="register" ? "var(--bg2)" : "transparent",
+                    color:      mode==="register" ? "var(--text)"  : "var(--text2)" }}>
                   Luo tili
                 </button>
               </div>
@@ -219,7 +219,7 @@ export default function LoginPage() {
                   <input type="checkbox" id="terms" checked={termsAccepted}
                     onChange={e => setTermsAccepted(e.target.checked)}
                     style={{ marginTop:3, cursor:"pointer", accentColor:"#4f7ef7" }} />
-                  <label htmlFor="terms" style={{ fontSize:12, color:"#8b92a8", lineHeight:1.6, cursor:"pointer" }}>
+                  <label htmlFor="terms" style={{ fontSize:12, color:"var(--text2)", lineHeight:1.6, cursor:"pointer" }}>
                     Hyväksyn{" "}
                     <span onClick={e => { e.preventDefault(); setShowTermsModal("terms") }}
                       style={{ color:"#4f7ef7", textDecoration:"underline", cursor:"pointer" }}>
@@ -246,13 +246,13 @@ export default function LoginPage() {
             <div style={{ display:"flex", justifyContent:"center", marginTop:12 }}>
               {mode !== "reset" && (
                 <button onClick={() => { setMode("reset"); setError(""); setInfo("") }}
-                  style={{ background:"none", border:"none", color:"#545d75", fontSize:12, cursor:"pointer", fontFamily:"system-ui" }}>
+                  style={{ background:"none", border:"none", color:"var(--text3)", fontSize:12, cursor:"pointer", fontFamily:"system-ui" }}>
                   Unohdin salasanan
                 </button>
               )}
               {mode === "reset" && (
                 <button onClick={() => { setMode("login"); setError(""); setInfo("") }}
-                  style={{ background:"none", border:"none", color:"#545d75", fontSize:12, cursor:"pointer", fontFamily:"system-ui" }}>
+                  style={{ background:"none", border:"none", color:"var(--text3)", fontSize:12, cursor:"pointer", fontFamily:"system-ui" }}>
                   ← Takaisin
                 </button>
               )}
@@ -269,11 +269,11 @@ export default function LoginPage() {
 }
 
 const s = {
-  wrap:      { minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", background:"#0e1117", fontFamily:"system-ui,sans-serif" },
-  card:      { background:"#161b27", border:"1px solid rgba(255,255,255,0.08)", borderRadius:16, padding:"32px 28px", width:380, maxWidth:"90vw" },
+  wrap:      { minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", background:"var(--bg)", fontFamily:"system-ui,sans-serif" },
+  card:      { background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:16, padding:"32px 28px", width:380, maxWidth:"90vw" },
   googleBtn: { width:"100%", padding:"12px", background:"#fff", color:"#333", border:"none", borderRadius:10, fontSize:14, fontWeight:500, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:10, fontFamily:"system-ui" },
-  lbl:       { display:"block", fontSize:12, fontWeight:500, color:"#8b92a8", marginBottom:6, marginTop:12 },
-  inp:       { width:"100%", background:"#1e2535", border:"1px solid rgba(255,255,255,0.1)", borderRadius:8, padding:"9px 12px", color:"#e8eaf0", fontSize:14, boxSizing:"border-box", fontFamily:"system-ui", outline:"none" },
+  lbl:       { display:"block", fontSize:12, fontWeight:500, color:"var(--text2)", marginBottom:6, marginTop:12 },
+  inp:       { width:"100%", background:"var(--bg3)", border:"1px solid var(--border2)", borderRadius:8, padding:"9px 12px", color:"var(--text)", fontSize:14, boxSizing:"border-box", fontFamily:"system-ui", outline:"none" },
   errBox:    { background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.2)", borderRadius:8, padding:"8px 12px", color:"#f87171", fontSize:12, marginTop:10 },
   infoBox:   { background:"rgba(34,197,94,0.1)", border:"1px solid rgba(34,197,94,0.2)", borderRadius:8, padding:"8px 12px", color:"#22c55e", fontSize:12, marginTop:10 },
 }

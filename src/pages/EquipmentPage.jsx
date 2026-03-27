@@ -49,7 +49,7 @@ function statusLabel(res) {
   if (res.status === "denied")   return { text: "Hylätty",      color: "#ef4444", bg: "rgba(239,68,68,0.12)" }
   if (isOverdue(res))            return { text: "⚠️ Myöhässä",  color: "#f59e0b", bg: "rgba(245,158,11,0.15)" }
   if (res.status === "approved") return { text: "Hyväksytty",   color: "#4f7ef7", bg: "rgba(79,126,247,0.12)" }
-  return { text: "Odottaa", color: "#8b92a8", bg: "rgba(255,255,255,0.06)" }
+  return { text: "Odottaa", color: "var(--text2)", bg: "rgba(255,255,255,0.06)" }
 }
 
 // ── Pääkomponentti ─────────────────────────────────────────────────────────────
@@ -255,7 +255,7 @@ export default function EquipmentPage() {
     <div style={{ display:"flex", flex:1, flexDirection:"column", overflow:"hidden", fontFamily:"system-ui" }}>
 
       {/* Yläpalkki */}
-      <div style={{ padding:"0 24px", height:52, borderBottom:"1px solid rgba(255,255,255,0.07)", display:"flex", alignItems:"center", gap:12, background:"#161b27", flexShrink:0 }}>
+      <div style={{ padding:"0 24px", height:52, borderBottom:"1px solid var(--border)", display:"flex", alignItems:"center", gap:12, background:"var(--bg2)", flexShrink:0 }}>
         <span style={{ fontWeight:700, fontSize:15, flex:1 }}>🎒 Kalusto</span>
 
         {isManager && overdue.length > 0 && (
@@ -304,10 +304,10 @@ export default function EquipmentPage() {
             padding:"60px 20px", gap:12, textAlign:"center"
           }}>
             <div style={{ fontSize:64 }}>🔍</div>
-            <div style={{ fontSize:18, fontWeight:600, color:"#e8eaf0" }}>
+            <div style={{ fontSize:18, fontWeight:600, color:"var(--text)" }}>
               Kalustetta ei löydy
             </div>
-            <div style={{ fontSize:14, color:"#8b92a8", maxWidth:320 }}>
+            <div style={{ fontSize:14, color:"var(--text2)", maxWidth:320 }}>
               Haulla <strong style={{ color:"#f59e0b" }}>"{search}"</strong> ei löytynyt tuloksia.
               Tarkista hakusana tai selaa kategorioita.
             </div>
@@ -325,21 +325,21 @@ export default function EquipmentPage() {
               return (
                 <div key={item.id} onClick={() => setSelected(item)}
                   style={{
-                    background:"#161b27", border:"1px solid rgba(255,255,255,0.07)", borderRadius:14,
+                    background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:14,
                     overflow:"hidden", cursor:"pointer", transition:"all 0.15s",
                     boxShadow:"0 2px 8px rgba(0,0,0,0.2)"
                   }}
                   onMouseEnter={e => e.currentTarget.style.borderColor="rgba(79,126,247,0.4)"}
-                  onMouseLeave={e => e.currentTarget.style.borderColor="rgba(255,255,255,0.07)"}>
-                  <div style={{ background:"#1e2535", padding:"20px 16px", textAlign:"center" }}>
+                  onMouseLeave={e => e.currentTarget.style.borderColor="var(--border)"}>
+                  <div style={{ background:"var(--bg3)", padding:"20px 16px", textAlign:"center" }}>
                     <div style={{ fontSize:42 }}>{item.emoji || catObj?.emoji || "📦"}</div>
-                    <div style={{ fontSize:11, color:"#545d75", marginTop:4 }}>
+                    <div style={{ fontSize:11, color:"var(--text3)", marginTop:4 }}>
                       {catObj?.emoji} {item.category}
                     </div>
                   </div>
                   <div style={{ padding:"12px 16px" }}>
                     <div style={{ fontWeight:600, fontSize:14, marginBottom:4 }}>{item.name}</div>
-                    <div style={{ fontSize:12, color:"#8b92a8", marginBottom:8 }}>📍 {item.location || "–"}</div>
+                    <div style={{ fontSize:12, color:"var(--text2)", marginBottom:8 }}>📍 {item.location || "–"}</div>
                     <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
                       <span style={{
                         fontSize:11, padding:"2px 8px", borderRadius:5, fontWeight:500,
@@ -348,7 +348,7 @@ export default function EquipmentPage() {
                       }}>
                         {item.available > 0 ? `${item.available}/${item.quantity} saatavilla` : "Ei saatavilla"}
                       </span>
-                      <span style={{ fontSize:11, color:"#545d75" }}>{item.condition}</span>
+                      <span style={{ fontSize:11, color:"var(--text3)" }}>{item.condition}</span>
                     </div>
                   </div>
                 </div>
@@ -360,7 +360,7 @@ export default function EquipmentPage() {
         {/* ── Varatut kalusteet -osio ──────────────────────────────────────────── */}
         {visibleReservations.filter(r => r.status !== "returned" && r.status !== "denied").length > 0 && (
           <div style={{ marginTop:16 }}>
-            <div style={{ fontSize:13, fontWeight:600, color:"#545d75", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:14, display:"flex", alignItems:"center", gap:8 }}>
+            <div style={{ fontSize:13, fontWeight:600, color:"var(--text3)", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:14, display:"flex", alignItems:"center", gap:8 }}>
               <span>📋 {isManager ? "Kaikki varaukset" : "Varatut kalusteet"}</span>
             </div>
             <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
@@ -377,8 +377,8 @@ export default function EquipmentPage() {
                   const od = isOverdue(res)
                   return (
                     <div key={res.id} style={{
-                      background: od ? "rgba(245,158,11,0.06)" : "#161b27",
-                      border: od ? "1px solid rgba(245,158,11,0.25)" : "1px solid rgba(255,255,255,0.07)",
+                      background: od ? "rgba(245,158,11,0.06)" : "var(--bg2)",
+                      border: od ? "1px solid rgba(245,158,11,0.25)" : "1px solid var(--border)",
                       borderRadius:12, padding:"12px 16px",
                       display:"flex", alignItems:"center", gap:14
                     }}>
@@ -389,11 +389,11 @@ export default function EquipmentPage() {
                           <span style={{ fontSize:11, padding:"2px 8px", borderRadius:5, background:sl.bg, color:sl.color, fontWeight:500 }}>{sl.text}</span>
                           {od && <span style={{ fontSize:11, color:"#ef4444" }}>🚨 Palautus myöhässä!</span>}
                         </div>
-                        <div style={{ fontSize:12, color:"#8b92a8" }}>
-                          👤 <strong style={{ color:"#e8eaf0" }}>{res.requesterName}</strong>
+                        <div style={{ fontSize:12, color:"var(--text2)" }}>
+                          👤 <strong style={{ color:"var(--text)" }}>{res.requesterName}</strong>
                           {res.purpose && <> · 🎯 <em>{res.purpose}</em></>}
                         </div>
-                        <div style={{ fontSize:11, color:"#545d75", marginTop:2 }}>
+                        <div style={{ fontSize:11, color:"var(--text3)", marginTop:2 }}>
                           📅 {res.startDate} – {res.endDate} · ×{res.quantity}
                         </div>
                       </div>
@@ -406,7 +406,7 @@ export default function EquipmentPage() {
                                 ✓ Hyväksy
                               </button>
                               <button onClick={() => denyReservation(res)}
-                                style={{ background:"transparent", border:"1px solid rgba(255,255,255,0.1)", borderRadius:6, color:"#545d75", padding:"4px 10px", cursor:"pointer", fontSize:11 }}>
+                                style={{ background:"transparent", border:"1px solid var(--border2)", borderRadius:6, color:"var(--text3)", padding:"4px 10px", cursor:"pointer", fontSize:11 }}>
                                 ✗ Hylkää
                               </button>
                             </>
@@ -418,7 +418,7 @@ export default function EquipmentPage() {
                                 📥 Palautettu
                               </button>
                               <button onClick={() => denyReservation(res)}
-                                style={{ background:"transparent", border:"1px solid rgba(255,255,255,0.1)", borderRadius:6, color:"#545d75", padding:"4px 10px", cursor:"pointer", fontSize:11 }}>
+                                style={{ background:"transparent", border:"1px solid var(--border2)", borderRadius:6, color:"var(--text3)", padding:"4px 10px", cursor:"pointer", fontSize:11 }}>
                                 ✗ Peru
                               </button>
                             </>
@@ -441,7 +441,7 @@ export default function EquipmentPage() {
                     <span style={{ fontSize:20 }}>{res.itemEmoji || "📦"}</span>
                     <div style={{ flex:1 }}>
                       <span style={{ fontWeight:500, fontSize:13 }}>{res.itemName} ×{res.quantity}</span>
-                      <span style={{ fontSize:12, color:"#8b92a8", marginLeft:8 }}>
+                      <span style={{ fontSize:12, color:"var(--text2)", marginLeft:8 }}>
                         — {res.requesterName} · piti palauttaa {res.endDate}
                       </span>
                     </div>
@@ -461,11 +461,11 @@ export default function EquipmentPage() {
       {selected && !showRequest && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:100 }}
           onClick={() => setSelected(null)}>
-          <div style={{ background:"#161b27", border:"1px solid rgba(255,255,255,0.12)", borderRadius:16, padding:24, width:460, maxWidth:"90vw", maxHeight:"85vh", overflowY:"auto" }}
+          <div style={{ background:"var(--bg2)", border:"1px solid var(--border2)", borderRadius:16, padding:24, width:460, maxWidth:"90vw", maxHeight:"85vh", overflowY:"auto" }}
             onClick={e => e.stopPropagation()}>
             <div style={{ fontSize:56, textAlign:"center", marginBottom:10 }}>{selected.emoji}</div>
             <h2 style={{ margin:"0 0 2px", fontSize:20, textAlign:"center" }}>{selected.name}</h2>
-            <p style={{ color:"#545d75", fontSize:13, margin:"0 0 18px", textAlign:"center" }}>
+            <p style={{ color:"var(--text3)", fontSize:13, margin:"0 0 18px", textAlign:"center" }}>
               {CATS.find(c => c.id === selected.category)?.emoji} {selected.category}
             </p>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
@@ -475,14 +475,14 @@ export default function EquipmentPage() {
                 ["Saatavilla", `${selected.available} / ${selected.quantity}`],
                 ["Vastuuhenkilö", selected.ownerName || "–"],
               ].map(([k,v]) => (
-                <div key={k} style={{ background:"#1e2535", borderRadius:8, padding:"10px 12px" }}>
-                  <div style={{ fontSize:10, color:"#545d75", marginBottom:4, textTransform:"uppercase" }}>{k}</div>
+                <div key={k} style={{ background:"var(--bg3)", borderRadius:8, padding:"10px 12px" }}>
+                  <div style={{ fontSize:10, color:"var(--text3)", marginBottom:4, textTransform:"uppercase" }}>{k}</div>
                   <div style={{ fontSize:13, fontWeight:500 }}>{v}</div>
                 </div>
               ))}
             </div>
             {selected.description && (
-              <p style={{ fontSize:13, color:"#8b92a8", lineHeight:1.6, background:"#1e2535", padding:"10px 12px", borderRadius:8, margin:"0 0 16px" }}>
+              <p style={{ fontSize:13, color:"var(--text2)", lineHeight:1.6, background:"var(--bg3)", padding:"10px 12px", borderRadius:8, margin:"0 0 16px" }}>
                 {selected.description}
               </p>
             )}
@@ -505,16 +505,16 @@ export default function EquipmentPage() {
       {showRequest && selected && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:110 }}
           onClick={() => setShowRequest(false)}>
-          <div style={{ background:"#161b27", border:"1px solid rgba(255,255,255,0.12)", borderRadius:16, padding:24, width:420, maxWidth:"90vw" }}
+          <div style={{ background:"var(--bg2)", border:"1px solid var(--border2)", borderRadius:16, padding:24, width:420, maxWidth:"90vw" }}
             onClick={e => e.stopPropagation()}>
             <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
               <span style={{ fontSize:32 }}>{selected.emoji}</span>
               <div>
                 <h3 style={{ margin:0, fontSize:16 }}>Varauspyyntö</h3>
-                <p style={{ margin:"2px 0 0", fontSize:13, color:"#8b92a8" }}>{selected.name}</p>
+                <p style={{ margin:"2px 0 0", fontSize:13, color:"var(--text2)" }}>{selected.name}</p>
               </div>
             </div>
-            <div style={{ background:"rgba(79,126,247,0.08)", border:"1px solid rgba(79,126,247,0.2)", borderRadius:8, padding:"10px 12px", marginBottom:16, fontSize:12, color:"#8b92a8" }}>
+            <div style={{ background:"rgba(79,126,247,0.08)", border:"1px solid rgba(79,126,247,0.2)", borderRadius:8, padding:"10px 12px", marginBottom:16, fontSize:12, color:"var(--text2)" }}>
               💬 Pyyntö avaa automaattisesti keskustelun kalustovastaavan kanssa.
             </div>
             <label style={lbl}>Määrä (max {selected.available})</label>
@@ -542,15 +542,15 @@ export default function EquipmentPage() {
       {showAdminPanel && isManager && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:120 }}
           onClick={() => setShowAdminPanel(false)}>
-          <div style={{ background:"#161b27", border:"1px solid rgba(255,255,255,0.12)", borderRadius:16, padding:24, width:560, maxWidth:"94vw", maxHeight:"85vh", overflowY:"auto" }}
+          <div style={{ background:"var(--bg2)", border:"1px solid var(--border2)", borderRadius:16, padding:24, width:560, maxWidth:"94vw", maxHeight:"85vh", overflowY:"auto" }}
             onClick={e => e.stopPropagation()}>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20 }}>
               <span style={{ fontWeight:700, fontSize:16 }}>🛠️ Kaluston hallinta</span>
-              <button onClick={() => setShowAdminPanel(false)} style={{ background:"transparent", border:"none", color:"#8b92a8", cursor:"pointer", fontSize:18 }}>✕</button>
+              <button onClick={() => setShowAdminPanel(false)} style={{ background:"transparent", border:"none", color:"var(--text2)", cursor:"pointer", fontSize:18 }}>✕</button>
             </div>
 
             {/* Välilehdet */}
-            <div style={{ display:"flex", gap:4, marginBottom:20, background:"#0e1117", borderRadius:10, padding:4 }}>
+            <div style={{ display:"flex", gap:4, marginBottom:20, background:"var(--bg)", borderRadius:10, padding:4 }}>
               {[
                 { id:"pending", label:`📬 Odottavat`, count:pending.length },
                 { id:"active",  label:`✅ Aktiiviset`, count:active.length },
@@ -560,7 +560,7 @@ export default function EquipmentPage() {
                   style={{
                     flex:1, padding:"7px 0", borderRadius:8, border:"none", cursor:"pointer", fontSize:12, fontWeight:500,
                     background: adminTab===t.id ? "#4f7ef7" : "transparent",
-                    color: adminTab===t.id ? "#fff" : "#8b92a8"
+                    color: adminTab===t.id ? "#fff" : "var(--text2)"
                   }}>
                   {t.label} {t.count > 0 && <span style={{ background:"rgba(255,255,255,0.2)", borderRadius:10, padding:"0 5px", marginLeft:4 }}>{t.count}</span>}
                 </button>
@@ -568,7 +568,7 @@ export default function EquipmentPage() {
             </div>
 
             {adminTabItems.length === 0 && (
-              <p style={{ color:"#545d75", textAlign:"center", padding:"24px 0" }}>Ei merkintöjä.</p>
+              <p style={{ color:"var(--text3)", textAlign:"center", padding:"24px 0" }}>Ei merkintöjä.</p>
             )}
 
             {adminTabItems.map(r => {
@@ -576,7 +576,7 @@ export default function EquipmentPage() {
               const od = isOverdue(r)
               return (
                 <div key={r.id} style={{
-                  background: od ? "rgba(245,158,11,0.06)" : "#1e2535",
+                  background: od ? "rgba(245,158,11,0.06)" : "var(--bg3)",
                   border: od ? "1px solid rgba(245,158,11,0.25)" : "1px solid rgba(255,255,255,0.06)",
                   borderRadius:10, padding:"12px 14px", marginBottom:10
                 }}>
@@ -588,11 +588,11 @@ export default function EquipmentPage() {
                         <span style={{ fontSize:11 }}>×{r.quantity}</span>
                         <span style={{ fontSize:11, padding:"2px 8px", borderRadius:5, background:sl.bg, color:sl.color, fontWeight:500 }}>{sl.text}</span>
                       </div>
-                      <div style={{ fontSize:12, color:"#8b92a8", marginBottom:2 }}>
-                        👤 <strong style={{ color:"#e8eaf0" }}>{r.requesterName}</strong>
-                        {r.purpose && <> · 🎯 <em style={{ color:"#545d75" }}>{r.purpose}</em></>}
+                      <div style={{ fontSize:12, color:"var(--text2)", marginBottom:2 }}>
+                        👤 <strong style={{ color:"var(--text)" }}>{r.requesterName}</strong>
+                        {r.purpose && <> · 🎯 <em style={{ color:"var(--text3)" }}>{r.purpose}</em></>}
                       </div>
-                      <div style={{ fontSize:11, color:"#545d75" }}>📅 {r.startDate} – {r.endDate}</div>
+                      <div style={{ fontSize:11, color:"var(--text3)" }}>📅 {r.startDate} – {r.endDate}</div>
                       {od && <div style={{ fontSize:11, color:"#ef4444", marginTop:4, fontWeight:500 }}>🚨 Palautus myöhässä!</div>}
                     </div>
                   </div>
@@ -605,7 +605,7 @@ export default function EquipmentPage() {
                         ✓ Hyväksy
                       </button>
                       <button onClick={() => denyReservation(r)}
-                        style={{ background:"transparent", border:"1px solid rgba(255,255,255,0.1)", borderRadius:6, color:"#545d75", padding:"5px 14px", cursor:"pointer", fontSize:12 }}>
+                        style={{ background:"transparent", border:"1px solid var(--border2)", borderRadius:6, color:"var(--text3)", padding:"5px 14px", cursor:"pointer", fontSize:12 }}>
                         ✗ Hylkää
                       </button>
                     </div>
@@ -617,7 +617,7 @@ export default function EquipmentPage() {
                         📥 Merkitse palautetuksi
                       </button>
                       <button onClick={() => denyReservation(r)}
-                        style={{ background:"transparent", border:"1px solid rgba(255,255,255,0.1)", borderRadius:6, color:"#545d75", padding:"5px 14px", cursor:"pointer", fontSize:12 }}>
+                        style={{ background:"transparent", border:"1px solid var(--border2)", borderRadius:6, color:"var(--text3)", padding:"5px 14px", cursor:"pointer", fontSize:12 }}>
                         ✗ Peru varaus
                       </button>
                     </div>
@@ -635,12 +635,12 @@ export default function EquipmentPage() {
       {showAdd && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:100 }}
           onClick={() => setShowAdd(false)}>
-          <div style={{ background:"#161b27", border:"1px solid rgba(255,255,255,0.12)", borderRadius:16, padding:24, width:460, maxWidth:"92vw", maxHeight:"90vh", overflowY:"auto" }}
+          <div style={{ background:"var(--bg2)", border:"1px solid var(--border2)", borderRadius:16, padding:24, width:460, maxWidth:"92vw", maxHeight:"90vh", overflowY:"auto" }}
             onClick={e => e.stopPropagation()}>
             <h3 style={{ margin:"0 0 18px" }}>➕ Lisää kalusto</h3>
 
             <label style={lbl}>Valitse emoji</label>
-            <div style={{ display:"flex", flexWrap:"wrap", gap:4, marginBottom:8, background:"#1e2535", borderRadius:10, padding:8 }}>
+            <div style={{ display:"flex", flexWrap:"wrap", gap:4, marginBottom:8, background:"var(--bg3)", borderRadius:10, padding:8 }}>
               {EQUIPMENT_EMOJIS.map(e => (
                 <button key={e} onClick={() => setForm(s => ({...s, emoji:e}))}
                   style={{ fontSize:20, padding:"4px 6px", cursor:"pointer", border: form.emoji===e ? "2px solid #4f7ef7" : "2px solid transparent", background: form.emoji===e ? "rgba(79,126,247,0.15)" : "transparent", borderRadius:8 }}>
@@ -690,7 +690,7 @@ export default function EquipmentPage() {
           position:"fixed", bottom:24, right:24, zIndex:400,
           background: notification.type === "error" ? "#2d1b1b" : notification.type === "warn" ? "#2a2011" : "#1a2a1a",
           border: `1px solid ${notification.type === "error" ? "rgba(239,68,68,0.4)" : notification.type === "warn" ? "rgba(245,158,11,0.4)" : "rgba(34,197,94,0.4)"}`,
-          borderRadius:12, padding:"12px 18px", color:"#e8eaf0", fontSize:13,
+          borderRadius:12, padding:"12px 18px", color:"var(--text)", fontSize:13,
           maxWidth:320, boxShadow:"0 8px 24px rgba(0,0,0,0.5)",
           animation:"slideIn 0.2s ease"
         }}>
@@ -706,16 +706,16 @@ export default function EquipmentPage() {
 // ── Tyylit ─────────────────────────────────────────────────────────────────────
 const filterBtn = active => ({
   padding:"5px 12px", borderRadius:20, fontSize:12, fontWeight:500, cursor:"pointer",
-  border: active ? "1px solid #4f7ef7" : "1px solid rgba(255,255,255,0.1)",
+  border: active ? "1px solid #4f7ef7" : "1px solid var(--border2)",
   background: active ? "rgba(79,126,247,0.15)" : "transparent",
-  color: active ? "#4f7ef7" : "#8b92a8", fontFamily:"system-ui", whiteSpace:"nowrap"
+  color: active ? "#4f7ef7" : "var(--text2)", fontFamily:"system-ui", whiteSpace:"nowrap"
 })
 
 const inp = {
-  width:"100%", background:"#1e2535", border:"1px solid rgba(255,255,255,0.1)",
-  borderRadius:8, padding:"9px 12px", color:"#e8eaf0", fontSize:14,
+  width:"100%", background:"var(--bg3)", border:"1px solid var(--border2)",
+  borderRadius:8, padding:"9px 12px", color:"var(--text)", fontSize:14,
   boxSizing:"border-box", fontFamily:"system-ui", outline:"none"
 }
-const lbl = { display:"block", fontSize:12, fontWeight:500, color:"#8b92a8", marginBottom:6, marginTop:12 }
+const lbl = { display:"block", fontSize:12, fontWeight:500, color:"var(--text2)", marginBottom:6, marginTop:12 }
 const btnPrimary = { background:"#4f7ef7", border:"none", borderRadius:8, color:"#fff", padding:"8px 16px", cursor:"pointer", fontSize:13, fontWeight:500, fontFamily:"system-ui" }
-const btnGhost = { background:"transparent", border:"1px solid rgba(255,255,255,0.15)", borderRadius:8, color:"#8b92a8", padding:"8px 16px", cursor:"pointer", fontSize:13, fontFamily:"system-ui" }
+const btnGhost = { background:"transparent", border:"1px solid var(--border2)", borderRadius:8, color:"var(--text2)", padding:"8px 16px", cursor:"pointer", fontSize:13, fontFamily:"system-ui" }

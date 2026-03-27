@@ -35,9 +35,9 @@ const THEMES = {
     "--bg":       "#0e1117",
     "--bg2":      "#161b27",
     "--bg3":      "#1e2535",
-    "--text":     "#e8eaf0",
-    "--text2":    "#8b92a8",
-    "--text3":    "#545d75",
+    "--text":     "#d7deea",
+    "--text2":    "#a7b2c8",
+    "--text3":    "#74809a",
     "--border":   "rgba(255,255,255,0.07)",
     "--border2":  "rgba(255,255,255,0.12)",
   },
@@ -170,27 +170,27 @@ export default function MainLayout() {
 
   const statusColor = profile?.status==="away"?"#f59e0b"
     : profile?.status==="busy"?"#ef4444"
-    : profile?.status==="offline"?"#545d75"
+    : profile?.status==="offline"?"var(--text3)"
     : "#22c55e"
 
-  const bottomBtn = { display:"flex", alignItems:"center", gap:9, padding:"7px 10px", borderRadius:8, cursor:"pointer", fontSize:12, fontWeight:500, fontFamily:"system-ui", border:"none", background:"#1e2535", color:"#8b92a8", width:"100%", textAlign:"left" }
+  const bottomBtn = { display:"flex", alignItems:"center", gap:9, padding:"7px 10px", borderRadius:8, cursor:"pointer", fontSize:12, fontWeight:500, fontFamily:"system-ui", border:"none", background:"var(--bg3)", color:"var(--text2)", width:"100%", textAlign:"left" }
 
   return (
-    <div style={{ display:"flex", height:"100vh", background:"#0e1117", color:"#e8eaf0", fontFamily:"system-ui,sans-serif", overflow:"hidden" }}>
+    <div style={{ display:"flex", height:"100vh", background:"var(--bg)", color:"var(--text)", fontFamily:"system-ui,sans-serif", overflow:"hidden" }}>
 
       {/* Sidebar */}
-      <div style={{ width:220, background:"#161b27", borderRight:"1px solid rgba(255,255,255,0.07)", display:"flex", flexDirection:"column", flexShrink:0 }}>
+      <div style={{ width:220, background:"var(--bg2)", borderRight:"1px solid var(--border)", display:"flex", flexDirection:"column", flexShrink:0 }}>
 
         {/* Logo */}
-        <div style={{ padding:"16px 16px 12px", borderBottom:"1px solid rgba(255,255,255,0.07)" }}>
+        <div style={{ padding:"16px 16px 12px", borderBottom:"1px solid var(--border)" }}>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-            <div style={{ width:36, height:36, background:"#1e2535", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, overflow:"hidden", border:"1px solid rgba(255,255,255,0.08)" }}>
+            <div style={{ width:36, height:36, background:"var(--bg3)", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, overflow:"hidden", border:"1px solid var(--border)" }}>
               <img src="/favicon.png" alt="logo" style={{ width:28, height:28, objectFit:"contain" }}
                 onError={e => { e.target.style.display="none"; e.target.parentNode.innerHTML="🏕️" }} />
             </div>
             <div>
               <div style={{ fontWeight:600, fontSize:14 }}>Maahiset</div>
-              <div style={{ fontSize:10, color:"#545d75" }}>Partio-portaali</div>
+              <div style={{ fontSize:10, color:"var(--text3)" }}>Partio-portaali</div>
             </div>
           </div>
         </div>
@@ -201,7 +201,7 @@ export default function MainLayout() {
             <div key={n.path} onClick={() => navigate(n.path)}
               style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", borderRadius:8, cursor:"pointer", marginBottom:2, fontSize:13, fontWeight:500,
                 background: isActive(n.path) ? "rgba(79,126,247,0.15)" : "transparent",
-                color:      isActive(n.path) ? "#4f7ef7" : "#8b92a8" }}>
+                color:      isActive(n.path) ? "#4f7ef7" : "var(--text2)" }}>
               <span style={{ fontSize:16 }}>{n.icon}</span>{n.label}
             </div>
           ))}
@@ -209,19 +209,19 @@ export default function MainLayout() {
             <div onClick={() => navigate("/hallinta")}
               style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", borderRadius:8, cursor:"pointer", marginBottom:2, fontSize:13, fontWeight:500,
                 background: isActive("/hallinta") ? "rgba(79,126,247,0.15)" : "transparent",
-                color:      isActive("/hallinta") ? "#4f7ef7" : "#8b92a8" }}>
+                color:      isActive("/hallinta") ? "#4f7ef7" : "var(--text2)" }}>
               <span style={{ fontSize:16 }}>👮</span>Hallinta
             </div>
           )}
         </nav>
 
         {/* Alareuna: profiili + laskuri + kirjaudu ulos */}
-        <div style={{ borderTop:"1px solid rgba(255,255,255,0.07)", padding:"8px 8px 8px" }}>
+        <div style={{ borderTop:"1px solid var(--border)", padding:"8px 8px 8px" }}>
 
           {/* Profiilikortti */}
           <div onClick={() => navigate("/profiili")}
             style={{ display:"flex", alignItems:"center", gap:9, padding:"10px 10px", borderRadius:9, cursor:"pointer", marginBottom:6,
-              background: isActive("/profiili") ? "rgba(79,126,247,0.15)" : "#1e2535",
+              background: isActive("/profiili") ? "rgba(79,126,247,0.15)" : "var(--bg3)",
               border: isActive("/profiili") ? "1px solid rgba(79,126,247,0.3)" : "1px solid transparent" }}>
             <div style={{ position:"relative", flexShrink:0 }}>
               {profile?.photoURL
@@ -230,23 +230,23 @@ export default function MainLayout() {
                     {(profile?.displayName||"?")[0]}
                   </div>
               }
-              <div style={{ position:"absolute", bottom:0, right:0, width:9, height:9, borderRadius:"50%", border:"2px solid #1e2535", background:statusColor }} />
+              <div style={{ position:"absolute", bottom:0, right:0, width:9, height:9, borderRadius:"50%", border:"2px solid var(--bg3)", background:statusColor }} />
             </div>
             <div style={{ flex:1, minWidth:0 }}>
               <div style={{ fontSize:12, fontWeight:500, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
-                color: isActive("/profiili") ? "#4f7ef7" : "#e8eaf0" }}>
+                color: isActive("/profiili") ? "#4f7ef7" : "var(--text)" }}>
                 {profile?.displayName||"Johtaja"}
               </div>
-              <div style={{ fontSize:10, color:"#545d75" }}>{profile?.role||"johtaja"}</div>
+              <div style={{ fontSize:10, color:"var(--text3)" }}>{profile?.role||"johtaja"}</div>
             </div>
-            <span style={{ fontSize:10, color: isActive("/profiili") ? "#4f7ef7" : "#545d75" }}>✏️</span>
+            <span style={{ fontSize:10, color: isActive("/profiili") ? "#4f7ef7" : "var(--text3)" }}>✏️</span>
           </div>
 
           {/* Paikalla-laskuri */}
-          <div style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 12px", background:"#1e2535", borderRadius:8, marginBottom:6 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 12px", background:"var(--bg3)", borderRadius:8, marginBottom:6 }}>
             <div style={{ width:7, height:7, borderRadius:"50%", background:"#22c55e", flexShrink:0 }} />
             <span style={{ fontSize:12, color:"#22c55e", fontWeight:600 }}>{onlineCount}</span>
-            <span style={{ fontSize:11, color:"#545d75" }}>paikalla / {totalCount} johtajaa</span>
+            <span style={{ fontSize:11, color:"var(--text3)" }}>paikalla / {totalCount} johtajaa</span>
           </div>
 
             {/* Kirjaudu ulos */}
@@ -273,8 +273,8 @@ export default function MainLayout() {
       <div style={{ position:"fixed", bottom:28, left:"50%", transform:"translateX(-50%)", display:"flex", flexDirection:"column", alignItems:"center", gap:8, zIndex:400, pointerEvents:"none" }}>
         {toasts.map(t => (
           <div key={t.id} style={{
-            background:"#1e2535", border:"1px solid rgba(255,255,255,0.12)", borderRadius:10,
-            padding:"10px 20px", fontSize:13, color:"#e8eaf0", whiteSpace:"nowrap",
+            background:"var(--bg3)", border:"1px solid var(--border2)", borderRadius:10,
+            padding:"10px 20px", fontSize:13, color:"var(--text)", whiteSpace:"nowrap",
             boxShadow:"0 8px 24px rgba(0,0,0,0.5)", pointerEvents:"all",
             borderBottom: t.type==="success"?"3px solid #22c55e":t.type==="error"?"3px solid #ef4444":"3px solid #4f7ef7",
             animation:"toastIn 0.25s ease",
@@ -288,16 +288,16 @@ export default function MainLayout() {
       {showInviteModal && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:400 }}
           onClick={() => setShowInviteModal(false)}>
-          <div style={{ background:"#161b27", border:"1px solid rgba(255,255,255,0.12)", borderRadius:16, padding:24, width:380, maxWidth:"90vw" }}
+          <div style={{ background:"var(--bg2)", border:"1px solid var(--border2)", borderRadius:16, padding:24, width:380, maxWidth:"90vw" }}
             onClick={e => e.stopPropagation()}>
             <h3 style={{ margin:"0 0 6px", fontSize:16 }}>👤＋ Kutsu johtaja</h3>
-            <p style={{ fontSize:12, color:"#545d75", margin:"0 0 14px", lineHeight:1.5 }}>@maahiset.net-osoitteet pääsevät sisään automaattisesti — kutsu on muille.</p>
+            <p style={{ fontSize:12, color:"var(--text3)", margin:"0 0 14px", lineHeight:1.5 }}>@maahiset.net-osoitteet pääsevät sisään automaattisesti — kutsu on muille.</p>
             <input value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} type="email"
               placeholder="johtaja@gmail.com" onKeyDown={e => e.key==="Enter" && sendQuickInvite()}
-              style={{ width:"100%", background:"#1e2535", border:"1px solid rgba(255,255,255,0.1)", borderRadius:8, padding:"9px 12px", color:"#e8eaf0", fontSize:14, fontFamily:"system-ui", outline:"none", boxSizing:"border-box", marginBottom:12 }} />
+              style={{ width:"100%", background:"var(--bg3)", border:"1px solid var(--border2)", borderRadius:8, padding:"9px 12px", color:"var(--text)", fontSize:14, fontFamily:"system-ui", outline:"none", boxSizing:"border-box", marginBottom:12 }} />
             <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
               <button onClick={() => setShowInviteModal(false)}
-                style={{ background:"transparent", border:"1px solid rgba(255,255,255,0.15)", borderRadius:8, color:"#8b92a8", padding:"8px 16px", cursor:"pointer", fontSize:13, fontFamily:"system-ui" }}>
+                style={{ background:"transparent", border:"1px solid var(--border2)", borderRadius:8, color:"var(--text2)", padding:"8px 16px", cursor:"pointer", fontSize:13, fontFamily:"system-ui" }}>
                 Peruuta
               </button>
               <button onClick={sendQuickInvite}
@@ -313,28 +313,28 @@ export default function MainLayout() {
       {showTerms && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:400 }}
           onClick={() => setShowTerms(null)}>
-          <div style={{ background:"#161b27", border:"1px solid rgba(255,255,255,0.12)", borderRadius:16, padding:28, width:480, maxWidth:"90vw", maxHeight:"80vh", overflowY:"auto" }}
+          <div style={{ background:"var(--bg2)", border:"1px solid var(--border2)", borderRadius:16, padding:28, width:480, maxWidth:"90vw", maxHeight:"80vh", overflowY:"auto" }}
             onClick={e => e.stopPropagation()}>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20 }}>
               <h3 style={{ margin:0, fontSize:16 }}>{showTerms==="terms" ? "📋 Käyttöehdot" : "🔐 Tietosuojakäytäntö"}</h3>
               <button onClick={() => setShowTerms(null)}
-                style={{ background:"transparent", border:"none", color:"#8b92a8", cursor:"pointer", fontSize:18 }}>✕</button>
+                style={{ background:"transparent", border:"none", color:"var(--text2)", cursor:"pointer", fontSize:18 }}>✕</button>
             </div>
             {showTerms === "terms" ? (
-              <div style={{ fontSize:13, color:"#8b92a8", lineHeight:1.8 }}>
-                <p><strong style={{ color:"#e8eaf0" }}>1. Sovelluksen käyttö</strong><br/>Partio-portaali on tarkoitettu ainoastaan Maahiset-lippukunnan johtajien sisäiseen käyttöön. Pääsy vaatii hyväksynnän.</p>
-                <p><strong style={{ color:"#e8eaf0" }}>2. Käyttäytyminen</strong><br/>Käyttäjät sitoutuvat asialliseen käytökseen. Häirintä, loukkaukset tai asiattomat viestit voivat johtaa käyttöoikeuden poistoon.</p>
-                <p><strong style={{ color:"#e8eaf0" }}>3. Sisältö</strong><br/>Käyttäjä on vastuussa lähettämästään sisällöstä. Laitonta tai haitallista sisältöä ei sallita.</p>
-                <p><strong style={{ color:"#e8eaf0" }}>4. Muutokset</strong><br/>Lippukunnanjohtaja voi päivittää ehtoja tarpeen mukaan. Käytön jatkaminen tarkoittaa ehtojen hyväksymistä.</p>
-                <p style={{ color:"#545d75", fontSize:11 }}>Viimeksi päivitetty: {new Date().toLocaleDateString("fi-FI")}</p>
+              <div style={{ fontSize:13, color:"var(--text2)", lineHeight:1.8 }}>
+                <p><strong style={{ color:"var(--text)" }}>1. Sovelluksen käyttö</strong><br/>Partio-portaali on tarkoitettu ainoastaan Maahiset-lippukunnan johtajien sisäiseen käyttöön. Pääsy vaatii hyväksynnän.</p>
+                <p><strong style={{ color:"var(--text)" }}>2. Käyttäytyminen</strong><br/>Käyttäjät sitoutuvat asialliseen käytökseen. Häirintä, loukkaukset tai asiattomat viestit voivat johtaa käyttöoikeuden poistoon.</p>
+                <p><strong style={{ color:"var(--text)" }}>3. Sisältö</strong><br/>Käyttäjä on vastuussa lähettämästään sisällöstä. Laitonta tai haitallista sisältöä ei sallita.</p>
+                <p><strong style={{ color:"var(--text)" }}>4. Muutokset</strong><br/>Lippukunnanjohtaja voi päivittää ehtoja tarpeen mukaan. Käytön jatkaminen tarkoittaa ehtojen hyväksymistä.</p>
+                <p style={{ color:"var(--text3)", fontSize:11 }}>Viimeksi päivitetty: {new Date().toLocaleDateString("fi-FI")}</p>
               </div>
             ) : (
-              <div style={{ fontSize:13, color:"#8b92a8", lineHeight:1.8 }}>
-                <p><strong style={{ color:"#e8eaf0" }}>Kerättävät tiedot</strong><br/>Tallennamme Google-tilisi nimen, sähköpostin ja profiilikuvan sekä sovellukseen lisäämäsi tiedot (titteli, bio, puhelinnumero). Lisäksi laitteen yleisiä tietoja.</p>
-                <p><strong style={{ color:"#e8eaf0" }}>Tietojen käyttö</strong><br/>Tietoja käytetään vain sovelluksen toimintaan. Tietoja ei myydä tai luovuteta ulkopuolisille.</p>
-                <p><strong style={{ color:"#e8eaf0" }}>Säilytys</strong><br/>Tiedot tallennetaan Google Firebase -palveluun EU:n alueella. Voit poistaa tilisi ja tietosi koska tahansa profiiliasetuksista.</p>
-                <p><strong style={{ color:"#e8eaf0" }}>Evästeet</strong><br/>Sovellus käyttää vain kirjautumiseen tarvittavia teknisiä evästeitä.</p>
-                <p style={{ color:"#545d75", fontSize:11 }}>Viimeksi päivitetty: {new Date().toLocaleDateString("fi-FI")}</p>
+              <div style={{ fontSize:13, color:"var(--text2)", lineHeight:1.8 }}>
+                <p><strong style={{ color:"var(--text)" }}>Kerättävät tiedot</strong><br/>Tallennamme Google-tilisi nimen, sähköpostin ja profiilikuvan sekä sovellukseen lisäämäsi tiedot (titteli, bio, puhelinnumero). Lisäksi laitteen yleisiä tietoja.</p>
+                <p><strong style={{ color:"var(--text)" }}>Tietojen käyttö</strong><br/>Tietoja käytetään vain sovelluksen toimintaan. Tietoja ei myydä tai luovuteta ulkopuolisille.</p>
+                <p><strong style={{ color:"var(--text)" }}>Säilytys</strong><br/>Tiedot tallennetaan Google Firebase -palveluun EU:n alueella. Voit poistaa tilisi ja tietosi koska tahansa profiiliasetuksista.</p>
+                <p><strong style={{ color:"var(--text)" }}>Evästeet</strong><br/>Sovellus käyttää vain kirjautumiseen tarvittavia teknisiä evästeitä.</p>
+                <p style={{ color:"var(--text3)", fontSize:11 }}>Viimeksi päivitetty: {new Date().toLocaleDateString("fi-FI")}</p>
               </div>
             )}
             <button onClick={() => setShowTerms(null)}

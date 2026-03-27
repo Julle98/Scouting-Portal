@@ -155,12 +155,12 @@ export default function AdminPage() {
     return ai !== -1 && ti !== -1 && ai < ti
   }
 
-  if (!isAdmin) return <div style={{ padding:32, color:"#545d75", fontFamily:"system-ui" }}>Ei käyttöoikeutta.</div>
+  if (!isAdmin) return <div style={{ padding:32, color:"var(--text3)", fontFamily:"system-ui" }}>Ei käyttöoikeutta.</div>
 
   const TAB = (t, label, badge) => (
     <button style={{ padding:"8px 16px", cursor:"pointer", fontSize:13, fontWeight:500, fontFamily:"system-ui",
       borderBottom: tab===t ? "2px solid #4f7ef7" : "2px solid transparent",
-      color: tab===t ? "#4f7ef7" : "#8b92a8", background:"transparent", border:"none", borderBottom: tab===t ? "2px solid #4f7ef7" : "2px solid transparent" }}
+      color: tab===t ? "#4f7ef7" : "var(--text2)", background:"transparent", border:"none", borderBottom: tab===t ? "2px solid #4f7ef7" : "2px solid transparent" }}
       onClick={() => setTab(t)}>
       {label}{badge > 0 && <span style={{ marginLeft:5, background:"#ef4444", color:"#fff", borderRadius:10, padding:"0 5px", fontSize:10 }}>{badge}</span>}
     </button>
@@ -168,7 +168,7 @@ export default function AdminPage() {
 
   return (
     <div style={{ display:"flex", flex:1, flexDirection:"column", overflow:"hidden", fontFamily:"system-ui" }}>
-      <div style={{ padding:"0 24px", height:52, borderBottom:"1px solid rgba(255,255,255,0.07)", display:"flex", alignItems:"center", gap:0, background:"#161b27", flexShrink:0 }}>
+      <div style={{ padding:"0 24px", height:52, borderBottom:"1px solid var(--border)", display:"flex", alignItems:"center", gap:0, background:"var(--bg2)", flexShrink:0 }}>
         <span style={{ fontWeight:600, fontSize:14, marginRight:20 }}>👮 Hallinta</span>
         {TAB("users",    "Käyttäjät",    0)}
         {TAB("debug",    "Debug",        users.filter(u => u.isDebug).length)}
@@ -183,12 +183,12 @@ export default function AdminPage() {
         {/* Käyttäjät */}
         {tab === "users" && (
           <div>
-            <div style={{ background:"#161b27", border:"1px solid rgba(255,255,255,0.07)", borderRadius:14, overflow:"hidden" }}>
+            <div style={{ background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:14, overflow:"hidden" }}>
               <table style={{ width:"100%", borderCollapse:"collapse" }}>
                 <thead>
-                  <tr style={{ borderBottom:"1px solid rgba(255,255,255,0.07)" }}>
+                  <tr style={{ borderBottom:"1px solid var(--border)" }}>
                     {["Käyttäjä","Sähköposti","Rooli","Tila","Toiminnot"].map(h => (
-                      <th key={h} style={{ padding:"10px 16px", textAlign:"left", fontSize:11, fontWeight:600, color:"#545d75", textTransform:"uppercase", letterSpacing:"0.06em", background:"#1e2535" }}>{h}</th>
+                      <th key={h} style={{ padding:"10px 16px", textAlign:"left", fontSize:11, fontWeight:600, color:"var(--text3)", textTransform:"uppercase", letterSpacing:"0.06em", background:"var(--bg3)" }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -203,16 +203,16 @@ export default function AdminPage() {
                         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
                           <Avatar src={u.photoURL} name={u.displayName} size={28} />
                           <span style={{ fontSize:13, fontWeight:500 }}>{u.displayName}</span>
-                          {u.id===user.uid && <span style={{ fontSize:10, color:"#545d75" }}>(sinä)</span>}
+                          {u.id===user.uid && <span style={{ fontSize:10, color:"var(--text3)" }}>(sinä)</span>}
                           {u.isDebug && <span style={{ fontSize:10, color:"#f59e0b", background:"#f59e0b20", padding:"2px 6px", borderRadius:4 }}>DEBUG</span>}
                         </div>
                       </td>
-                      <td style={{ padding:"10px 16px", fontSize:12, color:"#8b92a8" }}>{u.email}</td>
+                      <td style={{ padding:"10px 16px", fontSize:12, color:"var(--text2)" }}>{u.email}</td>
                       <td style={{ padding:"10px 16px" }}>
                         {!canManage
-                          ? <span style={{ fontSize:12, color:"#545d75" }}>{u.role}</span>
+                          ? <span style={{ fontSize:12, color:"var(--text3)" }}>{u.role}</span>
                           : <select value={u.role||"johtaja"} onChange={e => changeRole(u.id, e.target.value)}
-                              style={{ background:"#1e2535", border:"1px solid rgba(255,255,255,0.1)", borderRadius:6, padding:"4px 8px", color:"#e8eaf0", fontSize:12, fontFamily:"system-ui", cursor:"pointer", outline:"none" }}>
+                              style={{ background:"var(--bg3)", border:"1px solid var(--border2)", borderRadius:6, padding:"4px 8px", color:"var(--text)", fontSize:12, fontFamily:"system-ui", cursor:"pointer", outline:"none" }}>
                               {roles.filter((_, ri) => myRoleIdx === -1 || ri > myRoleIdx).map(r => <option key={r} value={r}>{r}</option>)}
                             </select>
                         }
@@ -220,7 +220,7 @@ export default function AdminPage() {
                       <td style={{ padding:"10px 16px" }}>
                         <span style={{ fontSize:12, display:"flex", alignItems:"center", gap:5 }}>
                           <span style={{ width:7, height:7, borderRadius:"50%", display:"inline-block",
-                            background: u.status==="away"?"#f59e0b":u.status==="busy"?"#ef4444":u.status==="offline"?"#545d75":u.online?"#22c55e":"#545d75" }} />
+                            background: u.status==="away"?"#f59e0b":u.status==="busy"?"#ef4444":u.status==="offline"?"var(--text3)":u.online?"#22c55e":"var(--text3)" }} />
                           {u.status==="away"?"Poissa":u.status==="busy"?"Älä häiritse":u.status==="offline"?"Offline":u.online?"Paikalla":"Poissa"}
                         </span>
                       </td>
@@ -245,12 +245,12 @@ export default function AdminPage() {
         {tab === "debug" && (
           <div>
             <h3 style={{ margin:"0 0 12px", fontSize:15 }}>Debug-käyttäjät ({users.filter(u => u.isDebug).length})</h3>
-            {users.filter(u => u.isDebug).length === 0 && <p style={{ color:"#545d75", fontSize:13 }}>Ei debug-käyttäjiä.</p>}
+            {users.filter(u => u.isDebug).length === 0 && <p style={{ color:"var(--text3)", fontSize:13 }}>Ei debug-käyttäjiä.</p>}
             {users.filter(u => u.isDebug).map(u => (
-              <div key={u.id} style={{ background:"#161b27", border:"1px solid rgba(255,255,255,0.07)", borderRadius:10, padding:"12px 16px", marginBottom:8, display:"flex", alignItems:"center", gap:12 }}>
+              <div key={u.id} style={{ background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:10, padding:"12px 16px", marginBottom:8, display:"flex", alignItems:"center", gap:12 }}>
                 <div style={{ flex:1 }}>
                   <div style={{ fontSize:13, fontWeight:500 }}>{u.email}</div>
-                  <div style={{ fontSize:11, color:"#545d75" }}>
+                  <div style={{ fontSize:11, color:"var(--text3)" }}>
                     Luotu: {u.joinedAt?.toDate ? u.joinedAt.toDate().toLocaleString('fi-FI') : 'Ei tietoa'} · 
                     Viimeksi käytetty: {u.lastUsed?.toDate ? u.lastUsed.toDate().toLocaleString('fi-FI') : 'Ei käytetty'}
                   </div>
@@ -271,37 +271,37 @@ export default function AdminPage() {
               {/* Vasen: roolien hallinta */}
               <div>
                 <h3 style={{ fontSize:15, margin:"0 0 6px" }}>Roolilista</h3>
-                <p style={{ fontSize:12, color:"#545d75", marginBottom:14, lineHeight:1.5 }}>
+                <p style={{ fontSize:12, color:"var(--text3)", marginBottom:14, lineHeight:1.5 }}>
                   Järjestys = hierarkia (ylin = korkein arvo). Ylemmät roolit voivat potkia vain alempia.
                 </p>
                 <div style={{ display:"flex", flexDirection:"column", gap:5, marginBottom:16 }}>
                   {roles.map((r, idx) => (
-                    <div key={r} style={{ display:"flex", alignItems:"center", gap:6, background:"#1e2535", border:"1px solid rgba(255,255,255,0.08)", borderRadius:8, padding:"7px 10px" }}>
+                    <div key={r} style={{ display:"flex", alignItems:"center", gap:6, background:"var(--bg3)", border:"1px solid var(--border)", borderRadius:8, padding:"7px 10px" }}>
                       {/* Järjestysnapit */}
                       <div style={{ display:"flex", flexDirection:"column", gap:1 }}>
                         <button onClick={() => moveRole(r, -1)} disabled={idx===0}
-                          style={{ background:"transparent", border:"none", color: idx===0 ? "#2a3147" : "#545d75", cursor: idx===0 ? "default" : "pointer", fontSize:10, padding:"0 3px", lineHeight:1, fontFamily:"system-ui" }}>▲</button>
+                          style={{ background:"transparent", border:"none", color: idx===0 ? "#2a3147" : "var(--text3)", cursor: idx===0 ? "default" : "pointer", fontSize:10, padding:"0 3px", lineHeight:1, fontFamily:"system-ui" }}>▲</button>
                         <button onClick={() => moveRole(r, 1)} disabled={idx===roles.length-1}
-                          style={{ background:"transparent", border:"none", color: idx===roles.length-1 ? "#2a3147" : "#545d75", cursor: idx===roles.length-1 ? "default" : "pointer", fontSize:10, padding:"0 3px", lineHeight:1, fontFamily:"system-ui" }}>▼</button>
+                          style={{ background:"transparent", border:"none", color: idx===roles.length-1 ? "#2a3147" : "var(--text3)", cursor: idx===roles.length-1 ? "default" : "pointer", fontSize:10, padding:"0 3px", lineHeight:1, fontFamily:"system-ui" }}>▼</button>
                       </div>
                       {/* Roolin nimi tai muokkauskenttä */}
                       {renamingRole?.original === r
                         ? <input autoFocus value={renamingRole.value}
                             onChange={e => setRenamingRole(prev => ({ ...prev, value: e.target.value }))}
                             onKeyDown={e => { if (e.key==="Enter") applyRename(); if (e.key==="Escape") setRenamingRole(null) }}
-                            style={{ flex:1, background:"#0e1117", border:"1px solid #4f7ef7", borderRadius:5, padding:"3px 7px", color:"#e8eaf0", fontSize:12, fontFamily:"system-ui", outline:"none" }} />
-                        : <span style={{ fontSize:12, color:"#e8eaf0", flex:1 }}>
+                            style={{ flex:1, background:"var(--bg)", border:"1px solid #4f7ef7", borderRadius:5, padding:"3px 7px", color:"var(--text)", fontSize:12, fontFamily:"system-ui", outline:"none" }} />
+                        : <span style={{ fontSize:12, color:"var(--text)", flex:1 }}>
                             <span style={{ fontSize:10, color:"#2a3147", marginRight:5 }}>#{idx+1}</span>{r}
                           </span>
                       }
-                      <span style={{ fontSize:10, color:"#545d75", whiteSpace:"nowrap" }}>
+                      <span style={{ fontSize:10, color:"var(--text3)", whiteSpace:"nowrap" }}>
                         {users.filter(u => u.role===r).length} hlö
                       </span>
                       {/* Nimeä uudelleen */}
                       {renamingRole?.original === r
                         ? <>
                             <button onClick={applyRename} style={{ background:"rgba(34,197,94,0.15)", border:"1px solid rgba(34,197,94,0.3)", borderRadius:5, color:"#22c55e", cursor:"pointer", fontSize:10, padding:"2px 6px", fontFamily:"system-ui" }}>✓</button>
-                            <button onClick={() => setRenamingRole(null)} style={{ background:"transparent", border:"none", color:"#545d75", cursor:"pointer", fontSize:11, padding:"2px 4px" }}>✕</button>
+                            <button onClick={() => setRenamingRole(null)} style={{ background:"transparent", border:"none", color:"var(--text3)", cursor:"pointer", fontSize:11, padding:"2px 4px" }}>✕</button>
                           </>
                         : <button onClick={() => startRename(r)}
                             style={{ background:"rgba(79,126,247,0.1)", border:"1px solid rgba(79,126,247,0.2)", borderRadius:5, color:"#4f7ef7", cursor:"pointer", fontSize:10, padding:"2px 6px", fontFamily:"system-ui" }}>
@@ -321,7 +321,7 @@ export default function AdminPage() {
                   <input value={newRole} onChange={e => setNewRole(e.target.value)}
                     onKeyDown={e => e.key==="Enter" && addRole()}
                     placeholder="Uusi rooli..."
-                    style={{ flex:1, background:"#1e2535", border:"1px solid rgba(255,255,255,0.1)", borderRadius:8, padding:"8px 12px", color:"#e8eaf0", fontSize:13, fontFamily:"system-ui", outline:"none" }} />
+                    style={{ flex:1, background:"var(--bg3)", border:"1px solid var(--border2)", borderRadius:8, padding:"8px 12px", color:"var(--text)", fontSize:13, fontFamily:"system-ui", outline:"none" }} />
                   <button onClick={addRole}
                     style={{ background:"rgba(79,126,247,0.15)", border:"1px solid rgba(79,126,247,0.3)", borderRadius:8, color:"#4f7ef7", padding:"8px 14px", cursor:"pointer", fontSize:13, fontFamily:"system-ui" }}>
                     + Lisää
@@ -337,7 +337,7 @@ export default function AdminPage() {
               {/* Oikea: roolien jako käyttäjille + potkiminen */}
               <div>
                 <h3 style={{ fontSize:15, margin:"0 0 6px" }}>Jäsenet & roolit</h3>
-                <p style={{ fontSize:12, color:"#545d75", marginBottom:14, lineHeight:1.5 }}>
+                <p style={{ fontSize:12, color:"var(--text3)", marginBottom:14, lineHeight:1.5 }}>
                   Voit vaihtaa roolia tai poistaa käyttäjän vain jos sinulla on korkeampi rooli.
                 </p>
                 <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
@@ -346,19 +346,19 @@ export default function AdminPage() {
                     const theirRoleIdx = roles.indexOf(u.role)
                     const canManage   = u.id !== user.uid && (myRoleIdx !== -1 && theirRoleIdx !== -1 ? myRoleIdx < theirRoleIdx : isAdmin)
                     return (
-                      <div key={u.id} style={{ display:"flex", alignItems:"center", gap:8, background:"#1e2535", border:"1px solid rgba(255,255,255,0.08)", borderRadius:8, padding:"8px 12px" }}>
+                      <div key={u.id} style={{ display:"flex", alignItems:"center", gap:8, background:"var(--bg3)", border:"1px solid var(--border)", borderRadius:8, padding:"8px 12px" }}>
                         <Avatar src={u.photoURL} name={u.displayName} size={26} />
                         <div style={{ flex:1, minWidth:0 }}>
                           <div style={{ fontSize:13, fontWeight:500, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                             {u.displayName}
-                            {u.id===user.uid && <span style={{ fontSize:10, color:"#545d75", marginLeft:5 }}>(sinä)</span>}
+                            {u.id===user.uid && <span style={{ fontSize:10, color:"var(--text3)", marginLeft:5 }}>(sinä)</span>}
                           </div>
-                          <div style={{ fontSize:10, color:"#545d75" }}>#{roles.indexOf(u.role)+1} {u.role||"–"}</div>
+                          <div style={{ fontSize:10, color:"var(--text3)" }}>#{roles.indexOf(u.role)+1} {u.role||"–"}</div>
                         </div>
                         {canManage
                           ? <>
                               <select value={u.role||"johtaja"} onChange={e => changeRole(u.id, e.target.value)}
-                                style={{ background:"#0e1117", border:"1px solid rgba(255,255,255,0.1)", borderRadius:6, padding:"4px 8px", color:"#e8eaf0", fontSize:11, fontFamily:"system-ui", cursor:"pointer", outline:"none", maxWidth:110 }}>
+                                style={{ background:"var(--bg)", border:"1px solid var(--border2)", borderRadius:6, padding:"4px 8px", color:"var(--text)", fontSize:11, fontFamily:"system-ui", cursor:"pointer", outline:"none", maxWidth:110 }}>
                                 {roles.filter((_, ri) => myRoleIdx === -1 || ri > myRoleIdx).map(r => <option key={r} value={r}>{r}</option>)}
                               </select>
                               <button onClick={() => removeUser(u.id)}
@@ -366,7 +366,7 @@ export default function AdminPage() {
                                 Poista
                               </button>
                             </>
-                          : <span style={{ fontSize:11, color:"#545d75" }}>{u.role}</span>
+                          : <span style={{ fontSize:11, color:"var(--text3)" }}>{u.role}</span>
                         }
                       </div>
                     )
@@ -380,14 +380,14 @@ export default function AdminPage() {
         {/* Kutsut */}
         {tab === "invites" && (
           <div>
-            <div style={{ background:"#161b27", border:"1px solid rgba(255,255,255,0.07)", borderRadius:14, padding:20, marginBottom:20 }}>
+            <div style={{ background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:14, padding:20, marginBottom:20 }}>
               <h3 style={{ margin:"0 0 6px", fontSize:15 }}>Lähetä kutsu</h3>
-              <p style={{ fontSize:12, color:"#545d75", margin:"0 0 14px", lineHeight:1.5 }}>
-                Kutsu on vapaaehtoinen — <strong style={{ color:"#8b92a8" }}>@maahiset.net</strong>-osoitteet pääsevät sisään automaattisesti.
+              <p style={{ fontSize:12, color:"var(--text3)", margin:"0 0 14px", lineHeight:1.5 }}>
+                Kutsu on vapaaehtoinen — <strong style={{ color:"var(--text2)" }}>@maahiset.net</strong>-osoitteet pääsevät sisään automaattisesti.
               </p>
               <div style={{ display:"flex", gap:10 }}>
                 <input value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} placeholder="johtaja@gmail.com" type="email"
-                  style={{ flex:1, background:"#1e2535", border:"1px solid rgba(255,255,255,0.1)", borderRadius:8, padding:"9px 12px", color:"#e8eaf0", fontSize:14, fontFamily:"system-ui", outline:"none" }} />
+                  style={{ flex:1, background:"var(--bg3)", border:"1px solid var(--border2)", borderRadius:8, padding:"9px 12px", color:"var(--text)", fontSize:14, fontFamily:"system-ui", outline:"none" }} />
                 <button onClick={sendInvite}
                   style={{ background:"#4f7ef7", border:"none", borderRadius:8, color:"#fff", padding:"9px 18px", cursor:"pointer", fontSize:13, fontWeight:500, fontFamily:"system-ui" }}>
                   Lähetä kutsu
@@ -396,44 +396,44 @@ export default function AdminPage() {
               <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:10 }}>
                 <input type="checkbox" id="debugInvite" checked={isDebugInvite} onChange={e => setIsDebugInvite(e.target.checked)}
                   style={{ width:16, height:16 }} />
-                <label htmlFor="debugInvite" style={{ fontSize:12, color:"#8b92a8", cursor:"pointer" }}>
+                <label htmlFor="debugInvite" style={{ fontSize:12, color:"var(--text2)", cursor:"pointer" }}>
                   Debug-käyttäjä (väliaikainen pääsy ilman profiilia)
                 </label>
               </div>
             </div>
 
             <h3 style={{ margin:"0 0 12px", fontSize:15 }}>Odottavat kutsut ({pendingInvites.length})</h3>
-            {pendingInvites.length === 0 && <p style={{ color:"#545d75", fontSize:13 }}>Ei odottavia kutsuja.</p>}
+            {pendingInvites.length === 0 && <p style={{ color:"var(--text3)", fontSize:13 }}>Ei odottavia kutsuja.</p>}
             {pendingInvites.map(inv => (
-              <div key={inv.id} style={{ background:"#161b27", border:"1px solid rgba(255,255,255,0.07)", borderRadius:10, padding:"12px 16px", marginBottom:8, display:"flex", alignItems:"center", gap:12 }}>
+              <div key={inv.id} style={{ background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:10, padding:"12px 16px", marginBottom:8, display:"flex", alignItems:"center", gap:12 }}>
                 <div style={{ flex:1 }}>
                   <div style={{ fontSize:13, fontWeight:500 }}>{inv.email} {inv.isDebug && <span style={{ fontSize:10, color:"#f59e0b", background:"#f59e0b20", padding:"2px 6px", borderRadius:4 }}>DEBUG</span>}</div>
-                  <div style={{ fontSize:11, color:"#545d75" }}>Lähettäjä: {inv.invitedByName}</div>
+                  <div style={{ fontSize:11, color:"var(--text3)" }}>Lähettäjä: {inv.invitedByName}</div>
                 </div>
                 <button onClick={() => revokeInvite(inv.id)}
-                  style={{ background:"transparent", border:"1px solid rgba(255,255,255,0.1)", borderRadius:6, color:"#545d75", padding:"4px 10px", cursor:"pointer", fontSize:12, fontFamily:"system-ui" }}>
+                  style={{ background:"transparent", border:"1px solid var(--border2)", borderRadius:6, color:"var(--text3)", padding:"4px 10px", cursor:"pointer", fontSize:12, fontFamily:"system-ui" }}>
                   Peruuta
                 </button>
               </div>
             ))}
 
             <h3 style={{ margin:"18px 0 12px", fontSize:15 }}>Käytetyt kutsut ({usedInvites.length})</h3>
-            {usedInvites.length === 0 && <p style={{ color:"#545d75", fontSize:13 }}>Ei käytettyjä kutsuja.</p>}
+            {usedInvites.length === 0 && <p style={{ color:"var(--text3)", fontSize:13 }}>Ei käytettyjä kutsuja.</p>}
             {usedInvites.map(inv => {
               const usedByUser = users.find(u => u.id === inv.usedBy)
               return (
-                <div key={inv.id} style={{ background:"#161b27", border:"1px solid rgba(255,255,255,0.07)", borderRadius:10, padding:"12px 16px", marginBottom:8, display:"flex", alignItems:"center", gap:12 }}>
+                <div key={inv.id} style={{ background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:10, padding:"12px 16px", marginBottom:8, display:"flex", alignItems:"center", gap:12 }}>
                   <div style={{ flex:1 }}>
                     <div style={{ fontSize:13, fontWeight:500 }}>
                       {inv.email} {inv.isDebug && <span style={{ fontSize:10, color:"#f59e0b", background:"#f59e0b20", padding:"2px 6px", borderRadius:4 }}>DEBUG</span>}
                     </div>
-                    <div style={{ fontSize:11, color:"#545d75" }}>
+                    <div style={{ fontSize:11, color:"var(--text3)" }}>
                       Käytetty: {inv.usedAt?.toDate ? inv.usedAt.toDate().toLocaleString("fi-FI") : "Ei tietoa"}
                     </div>
-                    <div style={{ fontSize:11, color:"#545d75" }}>
+                    <div style={{ fontSize:11, color:"var(--text3)" }}>
                       Käyttäjä: {usedByUser?.displayName || inv.usedBy || "Ei tietoa"}{usedByUser?.email ? ` (${usedByUser.email})` : ""}
                     </div>
-                    <div style={{ fontSize:11, color:"#545d75" }}>
+                    <div style={{ fontSize:11, color:"var(--text3)" }}>
                       Lähettäjä: {inv.invitedByName || "Ei tietoa"}
                     </div>
                   </div>
@@ -451,12 +451,12 @@ export default function AdminPage() {
           <div>
             {/* Viestiraportit */}
             <h3 style={{ margin:"0 0 14px", fontSize:15 }}>🚨 Viestiraportit ({modQueue.length})</h3>
-            {modQueue.length === 0 && <p style={{ color:"#545d75", fontSize:13, marginBottom:20 }}>Ei raportteja. 🎉</p>}
+            {modQueue.length === 0 && <p style={{ color:"var(--text3)", fontSize:13, marginBottom:20 }}>Ei raportteja. 🎉</p>}
             {modQueue.map(r => (
               <div key={r.id} style={{ background:"rgba(239,68,68,0.07)", border:"1px solid rgba(239,68,68,0.2)", borderRadius:10, padding:"14px 16px", marginBottom:10 }}>
                 <div style={{ fontSize:13, fontWeight:500, marginBottom:4 }}>Raportoitu viesti</div>
-                <div style={{ fontSize:13, color:"#8b92a8", background:"#1e2535", padding:"8px 12px", borderRadius:8, margin:"8px 0", fontStyle:"italic" }}>"{r.messageText?.slice(0,200)}"</div>
-                <div style={{ fontSize:12, color:"#545d75" }}>Raportoija: {r.reporterName} · Kanava: {r.channelId}</div>
+                <div style={{ fontSize:13, color:"var(--text2)", background:"var(--bg3)", padding:"8px 12px", borderRadius:8, margin:"8px 0", fontStyle:"italic" }}>"{r.messageText?.slice(0,200)}"</div>
+                <div style={{ fontSize:12, color:"var(--text3)" }}>Raportoija: {r.reporterName} · Kanava: {r.channelId}</div>
                 <div style={{ display:"flex", gap:8, marginTop:10 }}>
                   <button onClick={() => resolveReport(r.id,"resolved")} style={btnDanger}>🗑️ Poista viesti</button>
                   <button onClick={() => resolveReport(r.id,"dismissed")} style={btnSuccess}>✓ Merkitse suoritetuksi</button>
@@ -467,11 +467,11 @@ export default function AdminPage() {
             {/* Jäsenraportit */}
             <h3 style={{ margin:"20px 0 14px", fontSize:15 }}>
               👤 Jäsenraportit
-              <span style={{ marginLeft:8, fontSize:12, fontWeight:400, color:"#545d75" }}>
+              <span style={{ marginLeft:8, fontSize:12, fontWeight:400, color:"var(--text3)" }}>
                 {reports.filter(r=>r.status==="pending").length} odottaa / {reports.length} yhteensä
               </span>
             </h3>
-            {reports.length === 0 && <p style={{ color:"#545d75", fontSize:13 }}>Ei jäsenraportteja.</p>}
+            {reports.length === 0 && <p style={{ color:"var(--text3)", fontSize:13 }}>Ei jäsenraportteja.</p>}
             {reports.map(r => (
               <div key={r.id} style={{
                 background: r.status==="pending" ? "rgba(245,158,11,0.07)" : "rgba(34,197,94,0.04)",
@@ -481,7 +481,7 @@ export default function AdminPage() {
                 <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
                   <div style={{ flex:1 }}>
                     <div style={{ fontSize:13, fontWeight:500 }}>Raportoitu: <span style={{ color: r.status==="pending" ? "#f59e0b" : "#22c55e" }}>{r.targetName}</span></div>
-                    <div style={{ fontSize:12, color:"#545d75" }}>Raportoija: {r.reporterName}</div>
+                    <div style={{ fontSize:12, color:"var(--text3)" }}>Raportoija: {r.reporterName}</div>
                   </div>
                   <span style={{ fontSize:11, padding:"2px 8px", borderRadius:5,
                     background: r.status==="pending" ? "rgba(245,158,11,0.2)" : "rgba(34,197,94,0.2)",
@@ -489,7 +489,7 @@ export default function AdminPage() {
                     {r.status==="pending" ? "Odottaa" : "Suoritettu"}
                   </span>
                 </div>
-                {r.reason && <div style={{ fontSize:13, color:"#8b92a8", fontStyle:"italic", marginBottom:10 }}>"{r.reason}"</div>}
+                {r.reason && <div style={{ fontSize:13, color:"var(--text2)", fontStyle:"italic", marginBottom:10 }}>"{r.reason}"</div>}
                 {r.status==="pending" && (
                   <div style={{ display:"flex", gap:8 }}>
                     <button onClick={() => resolveMemberReport(r.id,"resolved")} style={btnSuccess}>✓ Merkitse suoritetuksi</button>
@@ -505,11 +505,11 @@ export default function AdminPage() {
           <div>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
               <h3 style={{ fontSize:15, margin:0 }}>⚠️ Virheloki</h3>
-              <span style={{ fontSize:12, color:"#545d75" }}>
+              <span style={{ fontSize:12, color:"var(--text3)" }}>
                 {errorLog.filter(e=>e.status!=="resolved").length} avointa / {errorLog.length} yhteensä
               </span>
             </div>
-            {errorLog.length === 0 && <p style={{ color:"#545d75", fontSize:13 }}>Ei virheitä. 🎉</p>}
+            {errorLog.length === 0 && <p style={{ color:"var(--text3)", fontSize:13 }}>Ei virheitä. 🎉</p>}
             {errorLog.map(e => {
               const isResolved = e.status === "resolved" || resolvedErrors[e.id]
               return (
@@ -521,17 +521,17 @@ export default function AdminPage() {
                   <div style={{ display:"flex", alignItems:"flex-start", gap:10 }}>
                     <div style={{ flex:1 }}>
                       <div style={{ fontSize:13, fontWeight:500, color: isResolved ? "#22c55e" : "#f87171", marginBottom:4 }}>{e.message}</div>
-                      <div style={{ fontSize:11, color:"#545d75", marginBottom:6 }}>
+                      <div style={{ fontSize:11, color:"var(--text3)", marginBottom:6 }}>
                         {e.url} · {e.createdAt?.toDate?.().toLocaleString("fi-FI")||""}
                         {isResolved && <span style={{ marginLeft:8, color:"#22c55e" }}>✓ Suoritettu</span>}
                       </div>
-                      <div style={{ fontSize:11, color:"#8b92a8", marginBottom:6 }}>
+                      <div style={{ fontSize:11, color:"var(--text2)", marginBottom:6 }}>
                         Käyttäjä: {e.user?.displayName || "Tuntematon"} {e.user?.email ? `(${e.user.email})` : ""}
                         {e.user?.uid ? ` · uid: ${e.user.uid}` : ""}
                       </div>
                       {!!e.breadcrumbs?.length && (
-                        <div style={{ fontSize:10, color:"#8b92a8", background:"#1e2535", padding:"6px 10px", borderRadius:6, marginBottom:6 }}>
-                          <div style={{ marginBottom:4, color:"#545d75" }}>Viimeiset toiminnot:</div>
+                        <div style={{ fontSize:10, color:"var(--text2)", background:"var(--bg3)", padding:"6px 10px", borderRadius:6, marginBottom:6 }}>
+                          <div style={{ marginBottom:4, color:"var(--text3)" }}>Viimeiset toiminnot:</div>
                           {e.breadcrumbs.slice(-6).map((b, idx) => (
                             <div key={idx} style={{ marginBottom:2 }}>
                               {b.at || ""} · {b.type || "event"} · {b.path || ""} {b.target ? `· ${b.target}` : ""}
@@ -540,7 +540,7 @@ export default function AdminPage() {
                         </div>
                       )}
                       {e.stack && !isResolved && (
-                        <div style={{ fontSize:10, color:"#545d75", background:"#1e2535", padding:"6px 10px", borderRadius:6, fontFamily:"monospace", overflow:"auto", maxHeight:80 }}>
+                        <div style={{ fontSize:10, color:"var(--text3)", background:"var(--bg3)", padding:"6px 10px", borderRadius:6, fontFamily:"monospace", overflow:"auto", maxHeight:80 }}>
                           {e.stack}
                         </div>
                       )}
@@ -560,5 +560,5 @@ export default function AdminPage() {
 }
 
 const btnDanger  = { background:"rgba(239,68,68,0.15)", border:"1px solid rgba(239,68,68,0.3)", borderRadius:6, color:"#f87171", padding:"5px 12px", cursor:"pointer", fontSize:12, fontFamily:"system-ui" }
-const btnGhost   = { background:"transparent", border:"1px solid rgba(255,255,255,0.1)", borderRadius:6, color:"#545d75", padding:"5px 12px", cursor:"pointer", fontSize:12, fontFamily:"system-ui" }
+const btnGhost   = { background:"transparent", border:"1px solid var(--border2)", borderRadius:6, color:"var(--text3)", padding:"5px 12px", cursor:"pointer", fontSize:12, fontFamily:"system-ui" }
 const btnSuccess = { background:"rgba(34,197,94,0.12)", border:"1px solid rgba(34,197,94,0.3)", borderRadius:6, color:"#22c55e", padding:"5px 12px", cursor:"pointer", fontSize:12, fontFamily:"system-ui" }
