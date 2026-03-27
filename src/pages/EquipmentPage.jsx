@@ -68,6 +68,7 @@ export default function EquipmentPage() {
   const [showAdminPanel, setShowAdminPanel]   = useState(false)
   const [adminTab, setAdminTab]     = useState("pending") // pending | active | history
   const [notification, setNotification] = useState(null)
+  const [loadingItems, setLoadingItems] = useState(true)
 
   const [form, setForm] = useState({
     name:"", category:"Teltat", quantity:1, location:"", description:"", condition:"Hyvä", emoji:"⛺"
@@ -77,7 +78,16 @@ export default function EquipmentPage() {
   // ── Kalusto-kuuntelu ────────────────────────────────────────────────────────
   useEffect(() => {
     const q = query(collection(db, "equipment"), orderBy("name"))
-    return onSnapshot(q, snap => setItems(snap.docs.map(d => ({ id:d.id, ...d.data() }))))
+    return onSnapshot(
+      q,
+      snap => {
+        setItems(snap.docs.map(d => ({ id:d.id, ...d.data() })))
+        setLoadingItems(false)
+      },
+      () => {
+        setLoadingItems(false)
+      }
+    )
   }, [])
 
   // ── Kaikkien varausten kuuntelu (näytetään kaikille, hallinta erikseen) ─────
@@ -297,8 +307,25 @@ export default function EquipmentPage() {
           />
         </div>
 
+        {loadingItems && (
+          <div style={{
+            display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
+            padding:"56px 20px", gap:12, textAlign:"center"
+          }}>
+            <div style={{
+              width:30,
+              height:30,
+              borderRadius:"50%",
+              border:"3px solid var(--border2)",
+              borderTopColor:"#4f7ef7",
+              animation:"spin 0.8s linear infinite"
+            }} />
+            <div style={{ fontSize:14, color:"var(--text2)" }}>Haetaan varusteita...</div>
+          </div>
+        )}
+
         {/* ── Hakuvirhe ──────────────────────────────────────────────────────── */}
-        {noResults && (
+        {!loadingItems && noResults && (
           <div style={{
             display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
             padding:"60px 20px", gap:12, textAlign:"center"
@@ -318,7 +345,7 @@ export default function EquipmentPage() {
         )}
 
         {/* ── Kalustoruudukko ─────────────────────────────────────────────────── */}
-        {!noResults && (
+        {!loadingItems && !noResults && (
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))", gap:16, marginBottom:40 }}>
             {filtered.map(item => {
               const catObj = CATS.find(c => c.id === item.category)
@@ -348,7 +375,7 @@ export default function EquipmentPage() {
                       }}>
                         {item.available > 0 ? `${item.available}/${item.quantity} saatavilla` : "Ei saatavilla"}
                       </span>
-                      <span style={{ fontSize:11, color:"var(--text3)" }}>{item.condition}</span>
+                      <span style={{ fontSize:11, color:"var(--text3)" }}>{`Kunto: ${item.condition}`}</span>
                     </div>
                   </div>
                 </div>
@@ -698,7 +725,7 @@ export default function EquipmentPage() {
         </div>
       )}
 
-      <style>{`@keyframes slideIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}`}</style>
+      <style>{`@keyframes slideIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)};}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
     </div>
   )
 }

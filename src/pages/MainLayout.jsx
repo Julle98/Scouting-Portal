@@ -1,6 +1,6 @@
 // src/pages/MainLayout.jsx
 import { useEffect, useState } from "react"
-import { Routes, Route, useNavigate, useLocation } from "react-router-dom"
+import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom"
 import { useAuth } from "../contexts/AuthContext"
 import { db } from "../services/firebase"
 import { doc, updateDoc, serverTimestamp, collection, onSnapshot, getDoc } from "firebase/firestore"
@@ -13,7 +13,7 @@ import MeetingsPage from "./MeetingsPage"
 import SettingsPage from "./SettingsPage"
 
 const NAV = [
-  { path:"/",         icon:"💬", label:"Chat" },
+  { path:"/chat",     icon:"💬", label:"Chat" },
   { path:"/kalusto",  icon:"🎒", label:"Kalusto" },
   { path:"/johtajat",   icon:"👥", label:"Johtajat" },
   { path:"/kokousvuorot", icon:"📅", label:"Kokousvuorot" },
@@ -21,7 +21,7 @@ const NAV = [
 ]
 
 const PAGE_LABELS = {
-  "/":         "Chat",
+  "/chat":      "Chat",
   "/kalusto":  "Kalusto",
   "/johtajat": "Johtajat",
   "/profiili": "Profiili",
@@ -95,7 +95,9 @@ export default function MainLayout() {
   }, [])
 
   useEffect(() => {
-    const pageLabel = PAGE_LABELS[location.pathname] || "Portaali"
+    const pageLabel = location.pathname.startsWith("/chat")
+      ? "Chat"
+      : (PAGE_LABELS[location.pathname] || "Portaali")
     document.title = `${pageLabel} - Maahiset-portaali`
   }, [location.pathname])
 
@@ -164,7 +166,7 @@ export default function MainLayout() {
   const totalCount  = allUsers.length
 
   function isActive(path) {
-    if (path === "/") return location.pathname === "/"
+    if (path === "/chat") return location.pathname.startsWith("/chat")
     return location.pathname.startsWith(path)
   }
 
@@ -183,7 +185,11 @@ export default function MainLayout() {
 
         {/* Logo */}
         <div style={{ padding:"16px 16px 12px", borderBottom:"1px solid var(--border)" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+          <div
+            onClick={() => navigate("/chat")}
+            title="Siirry chattiin"
+            style={{ display:"flex", alignItems:"center", gap:10, cursor:"pointer" }}
+          >
             <div style={{ width:36, height:36, background:"var(--bg3)", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, overflow:"hidden", border:"1px solid var(--border)" }}>
               <img src="/favicon.png" alt="logo" style={{ width:28, height:28, objectFit:"contain" }}
                 onError={e => { e.target.style.display="none"; e.target.parentNode.innerHTML="🏕️" }} />
@@ -259,7 +265,10 @@ export default function MainLayout() {
       {/* Sisältöalue */}
             <div style={{ flex:1, display:"flex", flexDirection:"column", minWidth:0, overflow:"hidden" }}>
               <Routes>
-                <Route path="/"         element={<ChatPage />} />
+                <Route path="/"         element={<Navigate to="/chat" replace />} />
+                <Route path="/chat"     element={<ChatPage />} />
+                <Route path="/chat/:chatType" element={<ChatPage />} />
+                <Route path="/chat/:chatType/:chatTarget" element={<ChatPage />} />
                 <Route path="/kalusto"  element={<EquipmentPage />} />
                 <Route path="/johtajat" element={<MembersPage />} />
                 <Route path="/profiili" element={<ProfilePage onSaved={() => window.__pushToast?.("Profiili tallennettu! ✓", "success")} />} />

@@ -1,5 +1,5 @@
 // src/pages/LoginPage.jsx
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "../contexts/AuthContext"
 import LoadingScreen from "./LoadingScreen"
@@ -12,6 +12,39 @@ import { collection, query, where, getDocs } from "firebase/firestore"
 import { auth, db } from "../services/firebase"
 
 const ALLOWED_DOMAIN = import.meta.env.VITE_ALLOWED_DOMAIN
+
+const THEMES = {
+  dark: {
+    "--bg": "#0e1117",
+    "--bg2": "#161b27",
+    "--bg3": "#1e2535",
+    "--text": "#d7deea",
+    "--text2": "#a7b2c8",
+    "--text3": "#74809a",
+    "--border": "rgba(255,255,255,0.07)",
+    "--border2": "rgba(255,255,255,0.12)",
+  },
+  light: {
+    "--bg": "#f5f6fa",
+    "--bg2": "#ffffff",
+    "--bg3": "#eef0f5",
+    "--text": "#1a1d27",
+    "--text2": "#4a5168",
+    "--text3": "#8b92a8",
+    "--border": "rgba(0,0,0,0.08)",
+    "--border2": "rgba(0,0,0,0.14)",
+  },
+}
+
+function applySystemTheme() {
+  if (typeof window === "undefined") return
+  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches
+  const vars = prefersDark ? THEMES.dark : THEMES.light
+  const root = document.documentElement
+  Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v))
+  document.body.style.background = vars["--bg"]
+  document.body.style.color = vars["--text"]
+}
 
 function TermsModal({ type, onClose }) {
   return (
@@ -56,6 +89,19 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false)
   const [termsAccepted, setTermsAccepted] = useState(false)
   const [showTermsModal, setShowTermsModal] = useState(null)
+
+  useEffect(() => {
+    applySystemTheme()
+    const media = window.matchMedia("(prefers-color-scheme: dark)")
+    const onMediaChange = () => applySystemTheme()
+    if (media.addEventListener) media.addEventListener("change", onMediaChange)
+    else media.addListener(onMediaChange)
+
+    return () => {
+      if (media.removeEventListener) media.removeEventListener("change", onMediaChange)
+      else media.removeListener(onMediaChange)
+    }
+  }, [])
 
   if (user) { navigate("/"); return null }
 

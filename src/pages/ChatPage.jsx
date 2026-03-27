@@ -1,5 +1,6 @@
 // src/pages/ChatPage.jsx
 import { useState, useEffect, useRef } from "react"
+import { useLocation, useNavigate, useParams } from "react-router-dom"
 import { useAuth } from "../contexts/AuthContext"
 import { db } from "../services/firebase"
 import {
@@ -20,8 +21,19 @@ const MAX_MSG_LENGTH = 1000
 const TYPING_TIMEOUT_MS = 5000
 const TYPING_WRITE_INTERVAL_MS = 1500
 
+function toChatSlug(value = "") {
+  return String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-äöå]/g, "")
+}
+
 export default function ChatPage() {
   const { user, profile, isAdmin } = useAuth()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { chatType, chatTarget } = useParams()
   const isEquipmentManager = isAdmin || profile?.role === "kalustovastaava" || profile?.roles?.includes("kalustovastaava")
   const [channels, setChannels]       = useState([])
   const [activeChannel, setActiveChannel] = useState(null)
@@ -507,7 +519,44 @@ export default function ChatPage() {
     const label = isSelf?{...targetUser,displayName:"📝 Muistiinpanot"}:targetUser
     setActiveDm({id:dmId,otherUser:label,isSelfNote:isSelf})
     setActiveChannel(null); setDmSettings(false)
+    const nextPath = isSelf ? "/chat/notes" : `/chat/dm/${targetUser.id}`
+    if (location.pathname !== nextPath) navigate(nextPath)
   }
+
+  function selectChannel(ch, updateRoute = true) {
+    setActiveChannel(ch)
+    setActiveDm(null)
+    setDmSettings(false)
+    if (!updateRoute) return
+    const target = toChatSlug(ch?.name || ch?.id)
+    const nextPath = `/chat/channel/${encodeURIComponent(target)}`
+    if (location.pathname !== nextPath) navigate(nextPath)
+  }
+
+  useEffect(() => {
+    if (!chatType) return
+
+    if (chatType === "notes") {
+      const self = allUsers.find(u => u.id === user.uid) || { id: user.uid, displayName: "Muistiinpanot" }
+      openDM(self)
+      return
+    }
+
+    if (chatType === "channel") {
+      if (!chatTarget || channels.length === 0) return
+      const target = toChatSlug(chatTarget)
+      const ch = channels.find(c => toChatSlug(c.name) === target || c.id === chatTarget)
+      if (ch && activeChannel?.id !== ch.id) selectChannel(ch, false)
+      return
+    }
+
+    if (chatType === "dm") {
+      if (!chatTarget || allUsers.length === 0) return
+      const dmUser = allUsers.find(u => u.id === chatTarget)
+      if (dmUser && activeDm?.otherUser?.id !== dmUser.id) openDM(dmUser)
+      return
+    }
+  }, [chatType, chatTarget, channels, allUsers, user.uid])
 
   async function resolveReport(id,action) { await updateDoc(doc(db,"moderation",id),{status:action,resolvedAt:serverTimestamp()}) }
   async function addMemberToChannel(uid) { if (!activeChannel || !isChannelAdmin) return; await updateDoc(doc(db,"channels",activeChannel.id),{members:arrayUnion(uid)}) }
@@ -648,7 +697,7 @@ export default function ChatPage() {
           </div>
           <div style={{overflowY:"auto",flex:1}}>
             {sortedChannels.map(ch=>(
-              <div key={ch.id} onClick={()=>{setActiveChannel(ch);setActiveDm(null);setDmSettings(false)}}
+              <div key={ch.id} onClick={()=>selectChannel(ch)}
                 style={{padding:"6px 12px",cursor:"pointer",fontSize:13,borderRadius:6,margin:"1px 4px",display:"flex",alignItems:"center",gap:6,
                   background:activeChannel?.id===ch.id?"rgba(79,126,247,0.15)":"transparent",
                   color:activeChannel?.id===ch.id?"#4f7ef7":"var(--text2)"}}>
@@ -748,6 +797,11 @@ export default function ChatPage() {
                   >
                     {activeDm.otherUser?.displayName}
                   </span>
+                  {activeDm.isSelfNote && (
+                    <span style={{fontSize:12,color:"var(--text3)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                      Tänne voit laittaa säilöön omia muistiinpanoja halutessasi
+                    </span>
+                  )}
                 </div>
               </div>
             )
@@ -867,7 +921,11 @@ export default function ChatPage() {
                           ))}
                         </div>
                       )}
-                      {isMine&&!msg.deleted&&<div style={{fontSize:10,color:"var(--text3)",marginTop:2}}>{readCount>0?`✓✓ Luettu (${readCount})`:"✓ Lähetetty"}</div>}
+                      {isMine&&!msg.deleted&&(
+                        <div style={{fontSize:10,color:"var(--text3)",marginTop:2}}>
+                          {activeDm?.isSelfNote ? "✓ Tallennettu" : (readCount>0 ? `✓✓ Luettu (${readCount})` : "✓ Lähetetty")}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )
