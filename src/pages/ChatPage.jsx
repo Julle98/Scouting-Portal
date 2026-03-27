@@ -17,6 +17,8 @@ const EMOJIS = ["😀","😂","🥰","😎","🤔","😅","🙏","👍","👎","
 const GIPHY_KEY = import.meta.env.VITE_GIPHY_API_KEY;
 const QUICK_REACTIONS = ["👍","❤️","😂","🔥","🎉","😎"]
 const MAX_MSG_LENGTH = 1000
+const TYPING_TIMEOUT_MS = 5000
+const TYPING_WRITE_INTERVAL_MS = 1500
 
 export default function ChatPage() {
   const { user, profile, isAdmin } = useAuth()
@@ -68,6 +70,7 @@ export default function ChatPage() {
   const [dmReportReason, setDmReportReason] = useState("")
   const [dmReportSent, setDmReportSent] = useState(false)
   const [readDetails, setReadDetails]   = useState(null) // { msg, sent, read }
+  const [typingUsers, setTypingUsers]   = useState([])
   // Slow mode
   const [lastSentAt, setLastSentAt]   = useState(0)
   const [slowModeLeft, setSlowModeLeft] = useState(0)
@@ -81,6 +84,8 @@ export default function ChatPage() {
   const fileInputRef   = useRef(null)
   const slowModeTimer  = useRef(null)
   const textAreaRef    = useRef(null)
+  const typingTimerRef = useRef(null)
+  const lastTypingWriteRef = useRef(0)
   const { pending: linkPending, open: openLink, close: closeLink } = useLinkWarning()
 
   let storage = null
@@ -231,6 +236,87 @@ export default function ChatPage() {
     }
   }, [text])
 
+  const activeTypingKey = activeChannel
+    ? `channel_${activeChannel.id}`
+    : (activeDm && !activeDm.isSelfNote ? `dm_${activeDm.id}` : null)
+
+  async function clearTypingIndicator(keyOverride = null) {
+    const key = keyOverride || activeTypingKey
+    if (!key || !user?.uid) return
+    await deleteDoc(doc(db, "typingIndicators", key, "users", user.uid)).catch(() => {})
+  }
+
+  function pulseTypingIndicator(value) {
+    if (!activeTypingKey || !user?.uid) return
+
+    const trimmed = value.trim()
+    if (!trimmed) {
+      clearTimeout(typingTimerRef.current)
+      clearTypingIndicator()
+      return
+    }
+
+    const now = Date.now()
+    if (now - lastTypingWriteRef.current >= TYPING_WRITE_INTERVAL_MS) {
+      setDoc(
+        doc(db, "typingIndicators", activeTypingKey, "users", user.uid),
+        {
+          uid: user.uid,
+          displayName: profile?.displayName || "Johtaja",
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      ).catch(() => {})
+      lastTypingWriteRef.current = now
+    }
+
+    clearTimeout(typingTimerRef.current)
+    typingTimerRef.current = setTimeout(() => {
+      clearTypingIndicator()
+    }, TYPING_TIMEOUT_MS)
+  }
+
+  useEffect(() => {
+    if (!activeTypingKey) {
+      setTypingUsers([])
+      return
+    }
+
+    const q = query(
+      collection(db, "typingIndicators", activeTypingKey, "users"),
+      orderBy("updatedAt", "desc"),
+      limit(20)
+    )
+
+    return onSnapshot(q, snap => {
+      const now = Date.now()
+      const users = snap.docs
+        .map(d => {
+          const data = d.data()
+          return { ...data, updatedAtMs: data.updatedAt?.toMillis?.() || 0 }
+        })
+        .filter(t => t.uid && t.uid !== user.uid && now - t.updatedAtMs < TYPING_TIMEOUT_MS)
+      setTypingUsers(users)
+    })
+  }, [activeTypingKey, user.uid])
+
+  useEffect(() => {
+    const iv = setInterval(() => {
+      setTypingUsers(prev => prev.filter(t => Date.now() - (t.updatedAtMs || 0) < TYPING_TIMEOUT_MS))
+    }, 1000)
+    return () => clearInterval(iv)
+  }, [])
+
+  useEffect(() => {
+    const key = activeTypingKey
+    return () => {
+      clearTimeout(typingTimerRef.current)
+      if (key && user?.uid) {
+        deleteDoc(doc(db, "typingIndicators", key, "users", user.uid)).catch(() => {})
+      }
+    }
+  }, [activeTypingKey, user?.uid])
+
   function isChannelMuted(id) {
     const until = mutedChannels[id]
     if (!until) return false
@@ -314,6 +400,7 @@ export default function ChatPage() {
       await addDoc(collection(db,"directMessages",activeDm.id,"messages"),payload)
       await updateDoc(doc(db,"directMessages",activeDm.id),{lastMessage:t||(gifUrl?"GIF":"Liite"),lastMessageAt:serverTimestamp()})
     }
+    clearTypingIndicator()
     setText(""); setPendingGif(null); setPendingFiles([]); setReplyTo(null)
     setShowEmoji(false); setShowGif(false)
     setLastSentAt(Date.now())
@@ -485,6 +572,14 @@ export default function ChatPage() {
   const charsLeft = MAX_MSG_LENGTH - text.length
   const slowMode = activeChannel?.slowMode||0
   const canSend = text.trim().length>0||pendingGif||pendingFiles.length>0
+  const typingNames = typingUsers.map(u=>u.displayName?.split(" ")[0]).filter(Boolean)
+  const typingText = typingNames.length===0
+    ? ""
+    : typingNames.length===1
+      ? `${typingNames[0]} kirjoittaa...`
+      : typingNames.length===2
+        ? `${typingNames[0]} ja ${typingNames[1]} kirjoittavat...`
+        : `${typingNames[0]} ja ${typingNames.length-1} muuta kirjoittavat...`
 
   const latestEquipmentRequest = [...messages].reverse().find(m => m.type === "equipment_request" && m.itemId && m.reservationId)
 
@@ -608,9 +703,17 @@ export default function ChatPage() {
             ) : (
               <div style={{display:"flex",alignItems:"baseline",gap:10,flex:1,minWidth:0}}>
                 <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  <Avatar src={activeDm.otherUser?.photoURL} name={activeDm.otherUser?.displayName} size={24} />
-                  <span style={{fontWeight:600,fontSize:14}}>{activeDm.otherUser?.displayName}</span>
-                  <div style={{width:8,height:8,borderRadius:"50%",background:statusColor(activeDm.otherUser)}}></div>
+                  <div style={{position:"relative",flexShrink:0,width:24,height:24}}>
+                    <Avatar src={activeDm.otherUser?.photoURL} name={activeDm.otherUser?.displayName} size={24} />
+                    <div style={{position:"absolute",bottom:0,right:0,width:8,height:8,borderRadius:"50%",border:"1.5px solid #161b27",background:statusColor(activeDm.otherUser)}}></div>
+                  </div>
+                  <span
+                    style={{fontWeight:600,fontSize:14,cursor:"pointer",textDecoration:"underline"}}
+                    onClick={() => activeDm.otherUser && setProfileModal(activeDm.otherUser)}
+                    title="Avaa profiili"
+                  >
+                    {activeDm.otherUser?.displayName}
+                  </span>
                 </div>
               </div>
             )
@@ -734,6 +837,11 @@ export default function ChatPage() {
                   </div>
                 )
               })}
+              {typingText && (
+                <div style={{padding:"8px 6px 2px 46px",fontSize:12,color:"#8b92a8",fontStyle:"italic"}}>
+                  {typingText}
+                </div>
+              )}
               <div ref={messagesEndRef}/>
             </div>
 
@@ -872,6 +980,7 @@ export default function ChatPage() {
                     onChange={e=>{
                       const val = e.target.value
                       setText(val)
+                      pulseTypingIndicator(val)
                       const cursor = e.target.selectionStart
                       const beforeCursor = val.slice(0, cursor)
                       const atIndex = beforeCursor.lastIndexOf('@')
