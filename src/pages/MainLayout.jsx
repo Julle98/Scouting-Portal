@@ -13,7 +13,7 @@ import MeetingsPage from "./MeetingsPage"
 import SettingsPage from "./SettingsPage"
 
 const VERSION = import.meta.env.VITE_VERSION 
-const TOAST_VISIBLE_MS = 7000
+const TOAST_VISIBLE_MS = 5000
 const TOAST_FADE_MS = 450
 
 const NAV = [

@@ -31,7 +31,7 @@ function toChatSlug(value = "") {
 
 function formatChannelLabel(channel) {
   if (!channel) return ""
-  return channel.type === "private" ? `#🔒 ${channel.name}` : `# ${channel.name}`
+  return channel.type === "private" ? `#🔒 ${channel.name}` : `#🌐 ${channel.name}`
 }
 
 export default function ChatPage() {
