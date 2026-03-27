@@ -124,20 +124,13 @@ export default function SettingsPage() {
       if (remote) setChangelogData(remote)
 
       const latest = source?.[0]?.version || currentVersion
-      setLatestRemoteVersion(latest)
+      setLatestRemoteVersion(compareVersions(latest, currentVersion) > 0 ? latest : null)
       const alreadyPrompted = localStorage.getItem(LAST_PROMPTED_UPDATE_KEY) === String(latest)
 
       if (compareVersions(latest, currentVersion) > 0) {
         if (!alreadyPrompted) {
           localStorage.setItem(LAST_PROMPTED_UPDATE_KEY, String(latest))
           window.__pushToast?.(`Uusi versio ${latest} saatavilla - päivitä sivu`, "info")
-          const shouldReload = window.confirm(`Uusi versio (${latest}) on saatavilla. Päivitetäänkö sivu nyt?`)
-          if (shouldReload) {
-            const url = new URL(window.location.href)
-            url.searchParams.set("_refresh", String(Date.now()))
-            window.location.href = url.toString()
-            return
-          }
         } else {
           window.__pushToast?.(`Uusi versio ${latest} on edelleen saatavilla`, "info")
         }
@@ -145,7 +138,6 @@ export default function SettingsPage() {
         localStorage.removeItem(LAST_PROMPTED_UPDATE_KEY)
         window.__pushToast?.(`Versio ${currentVersion} - ajantasainen ✓`, "success")
       }
-      setShowChangelog(true)
     } catch {
       window.__pushToast?.("Päivitystarkistus epäonnistui", "error")
     } finally {

@@ -61,16 +61,33 @@ export function LinkWarningModal({ pending, onClose }) {
 export function TextWithLinks({ text, onLinkClick }) {
   if (!text) return null
   const urlRegex = /(https?:\/\/[^\s]+)/g
+  const isUrlRegex = /^https?:\/\/[^\s]+$/
+  const mentionRegex = /(^|\s)(@[\w\u00c0-\u024f-]+)/g
   const parts = text.split(urlRegex)
+
+  function renderMentions(part, keyPrefix) {
+    const chunks = part.split(mentionRegex)
+    return chunks.map((chunk, i) => {
+      if (chunk && chunk.startsWith("@")) {
+        return (
+          <span key={`${keyPrefix}-m-${i}`} style={{ color:"#ef4444", fontWeight:600 }}>
+            {chunk}
+          </span>
+        )
+      }
+      return <span key={`${keyPrefix}-t-${i}`}>{chunk}</span>
+    })
+  }
+
   return (
     <>
       {parts.map((part, i) =>
-        urlRegex.test(part)
+        isUrlRegex.test(part)
           ? <span key={i} onClick={() => onLinkClick(part)}
               style={{ color:"#4f7ef7", textDecoration:"underline", cursor:"pointer", wordBreak:"break-all" }}>
               {part}
             </span>
-          : <span key={i}>{part}</span>
+          : <span key={i}>{renderMentions(part, `part-${i}`)}</span>
       )}
     </>
   )

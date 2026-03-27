@@ -77,6 +77,7 @@ export default function MainLayout() {
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [showTerms, setShowTerms]   = useState(null) // "terms" | "privacy"
   const [inviteEmail, setInviteEmail] = useState("")
+  const [chatHasBadge, setChatHasBadge] = useState(localStorage.getItem("chatAlert") === "1")
 
   useEffect(() => {
     if (!user) return
@@ -132,6 +133,29 @@ export default function MainLayout() {
       pushToast(`Tervetuloa, ${profile.displayName.split(" ")[0]}! 👋`, "success")
     }
   }, [profile?.displayName])
+
+  useEffect(() => {
+    const syncBadge = () => {
+      setChatHasBadge(localStorage.getItem("chatAlert") === "1")
+    }
+
+    const onBadgeChange = (e) => {
+      if (typeof e?.detail?.hasChatAlert === "boolean") {
+        setChatHasBadge(e.detail.hasChatAlert)
+      } else {
+        syncBadge()
+      }
+    }
+
+    window.addEventListener("chatBadgesChanged", onBadgeChange)
+    window.addEventListener("storage", syncBadge)
+    syncBadge()
+
+    return () => {
+      window.removeEventListener("chatBadgesChanged", onBadgeChange)
+      window.removeEventListener("storage", syncBadge)
+    }
+  }, [])
 
   function pushToast(msg, type="success") {
     const id = Date.now()
@@ -208,7 +232,11 @@ export default function MainLayout() {
               style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", borderRadius:8, cursor:"pointer", marginBottom:2, fontSize:13, fontWeight:500,
                 background: isActive(n.path) ? "rgba(79,126,247,0.15)" : "transparent",
                 color:      isActive(n.path) ? "#4f7ef7" : "var(--text2)" }}>
-              <span style={{ fontSize:16 }}>{n.icon}</span>{n.label}
+              <span style={{ fontSize:16 }}>{n.icon}</span>
+              <span style={{ flex:1 }}>{n.label}</span>
+              {n.path === "/chat" && chatHasBadge && (
+                <span style={{ width:9, height:9, borderRadius:"50%", background:"#ef4444", boxShadow:"0 0 0 2px rgba(239,68,68,0.2)" }} />
+              )}
             </div>
           ))}
           {isAdmin && (

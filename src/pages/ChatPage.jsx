@@ -90,6 +90,7 @@ export default function ChatPage() {
   const [showMention, setShowMention] = useState(false)
   const [mentionQuery, setMentionQuery] = useState("")
   const [mentionIndex, setMentionIndex] = useState(0)
+  const [mentionStart, setMentionStart] = useState(-1)
   const [condensedChat, setCondensedChat] = useState(localStorage.getItem("condensedChat") === "true")
   const [chatOrder, setChatOrder] = useState(localStorage.getItem("chatOrder") || "default")
 
@@ -164,6 +165,16 @@ export default function ChatPage() {
     }
   }, [channels, allUsers, user.uid, profile])
 
+  useEffect(() => {
+    const totalMentions = Object.values(channelBadges).reduce((sum, b) => sum + (b?.mentions || 0), 0)
+    const totalDmUnread = Object.values(dmBadges).reduce((sum, b) => sum + (b?.unread || 0), 0)
+    const hasChatAlert = totalMentions > 0 || totalDmUnread > 0
+    localStorage.setItem("chatAlert", hasChatAlert ? "1" : "0")
+    window.dispatchEvent(
+      new CustomEvent("chatBadgesChanged", { detail: { hasChatAlert, totalMentions, totalDmUnread } })
+    )
+  }, [channelBadges, dmBadges])
+
   // Auto-luo muistiinpano-DM
   useEffect(() => {
     if (!user) return
@@ -185,8 +196,16 @@ export default function ChatPage() {
       setMessages(prev => {
         if (prev.length>0 && newMsgs.length>prev.length) {
           const newest = newMsgs[newMsgs.length-1]
-          if (newest.senderId!==user.uid && !isChannelMuted(activeChannel?.id||activeDm?.id))
-            pushNotif("chat",`${newest.senderName}: ${newest.text?.slice(0,60)||"GIF"}`,activeChannel?`#${activeChannel.name}`:activeDm?.otherUser?.displayName,newest)
+          const shouldNotify = document.visibilityState === "hidden"
+          if (shouldNotify && newest.senderId!==user.uid && !isChannelMuted(activeChannel?.id||activeDm?.id)) {
+            const title = activeChannel
+              ? `${newest.senderName} · #${activeChannel.name}`
+              : newest.senderName
+            const body = newest.text?.trim()
+              ? newest.text.slice(0, 100)
+              : (newest.gifUrl ? "GIF" : "Liite")
+            pushNotif("chat", body, title, newest)
+          }
         }
         return newMsgs
       })
@@ -401,7 +420,17 @@ export default function ChatPage() {
     return urls
   }
 
-  async function sendMessage(gifUrl=null, gifPreview=null) {
+  function appendEmoji(emoji) {
+    if (editingMsg) {
+      setEditText(prev => `${prev}${emoji}`)
+    } else {
+      setText(prev => `${prev}${emoji}`)
+      pulseTypingIndicator(`${text}${emoji}`)
+    }
+    setShowEmoji(false)
+  }
+
+  async function sendMessage(gifUrl=pendingGif?.url||null, gifPreview=pendingGif?.preview||null) {
     const t = text.trim()
     if (!t && !gifUrl && pendingFiles.length===0) return
     if (!activeChannel && !activeDm) return
@@ -930,13 +959,14 @@ export default function ChatPage() {
                   </div>
                 )
               })}
-              {typingText && (
-                <div style={{padding:condensedChat?"8px 6px 2px 12px":"8px 6px 2px 46px",fontSize:12,color:"var(--text2)",fontStyle:"italic"}}>
-                  {typingText}
-                </div>
-              )}
               <div ref={messagesEndRef}/>
             </div>
+
+            {typingText && (
+              <div style={{padding:"6px 20px 0",fontSize:12,color:"var(--text2)",fontStyle:"italic",background:"var(--bg)",borderTop:"1px solid var(--border)"}}>
+                {typingText}
+              </div>
+            )}
 
             {/* Vastaa */}
             {replyTo&&(
@@ -1012,7 +1042,7 @@ export default function ChatPage() {
               {/* Emoji */}
               {showEmoji&&(
                 <div style={{position:"absolute",bottom:70,left:20,background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:12,padding:12,display:"grid",gridTemplateColumns:"repeat(8,1fr)",gap:4,zIndex:10,boxShadow:"0 8px 32px rgba(0,0,0,0.5)"}}>
-                  {EMOJIS.map(e=><button key={e} onClick={()=>{setText(t=>t+e);setShowEmoji(false)}} style={{fontSize:20,padding:4,cursor:"pointer",border:"none",background:"transparent",borderRadius:6}}>{e}</button>)}
+                  {EMOJIS.map(e=><button key={e} onClick={()=>appendEmoji(e)} style={{fontSize:20,padding:4,cursor:"pointer",border:"none",background:"transparent",borderRadius:6}}>{e}</button>)}
                 </div>
               )}
 
@@ -1043,9 +1073,11 @@ export default function ChatPage() {
                 <div style={{position:"absolute",bottom:80,left:20,background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:10,padding:6,maxHeight:200,overflowY:"auto",zIndex:10,boxShadow:"0 8px 32px rgba(0,0,0,0.5)",minWidth:200}}>
                   {allUsers.filter(u => u.displayName.toLowerCase().includes(mentionQuery.toLowerCase())).slice(0,5).map((u, i) => (
                     <div key={u.id} onClick={() => {
-                      const before = text.slice(0, mentionIndex)
-                      const after = text.slice(mentionIndex + mentionQuery.length + 1)
+                      const start = mentionStart >= 0 ? mentionStart : 0
+                      const before = text.slice(0, start)
+                      const after = text.slice(start + mentionQuery.length + 1)
                       setText(before + u.displayName.split(' ')[0] + ' ' + after)
+                      setMentionStart(-1)
                       setShowMention(false)
                     }}
                       style={{padding:"6px 10px",cursor:"pointer",fontSize:13,color:"var(--text)",borderRadius:6,background:i===mentionIndex?"rgba(79,126,247,0.15)":"transparent",display:"flex",alignItems:"center",gap:8}}>
@@ -1081,13 +1113,16 @@ export default function ChatPage() {
                         const query = beforeCursor.slice(atIndex+1)
                         if (query.includes(' ')) {
                           setShowMention(false)
+                          setMentionStart(-1)
                         } else {
                           setMentionQuery(query)
+                          setMentionStart(atIndex)
                           setShowMention(true)
                           setMentionIndex(0)
                         }
                       } else {
                         setShowMention(false)
+                        setMentionStart(-1)
                       }
                     }}
                     onKeyDown={e=>{
@@ -1102,13 +1137,16 @@ export default function ChatPage() {
                         } else if (e.key === 'Enter' || e.key === 'Tab') {
                           e.preventDefault()
                           if (filteredUsers[mentionIndex]) {
-                            const before = text.slice(0, mentionIndex)
-                            const after = text.slice(mentionIndex + mentionQuery.length + 1)
+                            const start = mentionStart >= 0 ? mentionStart : 0
+                            const before = text.slice(0, start)
+                            const after = text.slice(start + mentionQuery.length + 1)
                             setText(before + filteredUsers[mentionIndex].displayName.split(' ')[0] + ' ' + after)
+                            setMentionStart(-1)
                             setShowMention(false)
                           }
                         } else if (e.key === 'Escape') {
                           setShowMention(false)
+                          setMentionStart(-1)
                         }
                       } else {
                         if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMessage()}
