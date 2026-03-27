@@ -1577,7 +1577,7 @@ export default function ChatPage() {
             <div style={{fontWeight:600,fontSize:17,marginBottom:3}}>{profileModal.displayName}</div>
             <div style={{fontSize:12,color:"var(--text2)",marginBottom:2}}>{profileModal.role}</div>
             {profileModal.title&&<div style={{fontSize:12,color:"var(--text3)",marginBottom:8}}>{profileModal.title}</div>}
-            <div style={{fontSize:12,color:"var(--text3)",marginBottom:12}}>{profileModal.online?"🟢 Paikalla":`Viimeksi: ${formatLastSeen(profileModal.lastSeen)}`}</div>
+            <div style={{fontSize:12,color:"var(--text3)",marginBottom:12}}>{profileModal.online?"🟢 Paikalla":`Viimeksi paikalla: ${formatLastSeen(profileModal.lastSeen)}`}</div>
             {profileModal.bio&&<p style={{fontSize:13,color:"var(--text2)",lineHeight:1.6,background:"var(--bg3)",padding:"10px 14px",borderRadius:8,margin:"0 0 14px",textAlign:"left"}}>{profileModal.bio}</p>}
             {profileModal.phone&&<div style={{fontSize:13,color:"var(--text3)",marginBottom:14}}>📞 {profileModal.phone}</div>}
             <div style={{display:"flex",gap:8,justifyContent:"center"}}>
@@ -1735,7 +1735,7 @@ export default function ChatPage() {
 
       {showEquipmentChatPicker&&(
         <Modal title="Kalustovaraukset" onClose={()=>setShowEquipmentChatPicker(false)}>
-          <p style={{fontSize:12,color:"var(--text3)",margin:"0 0 14px"}}>Avaa olemassa oleva keskustelu tai aloita uusi kalustovaraus kalustot sivulta.</p>
+          <p style={{fontSize:12,color:"var(--text3)",margin:"0 0 14px"}}>Avaa olemassa oleva keskustelu tai aloita uusi kalustovaraus kalustot sivulta. Voit avata kalustot napista alempaa.</p>
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
             <button onClick={()=>{navigate("/kalusto");setShowEquipmentChatPicker(false)}} style={{...btnPrimary,width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
               <span>🎒</span>
@@ -1803,7 +1803,7 @@ export default function ChatPage() {
       {/* Kutsu */}
       {showInvite&&(
         <Modal title="Kutsu johtaja" onClose={()=>setShowInvite(false)}>
-          <label style={lbl}>Sähköposti</label><input value={inviteEmail} onChange={e=>setInviteEmail(e.target.value)} placeholder="johtaja@gmail.com" style={inp} type="email"/>
+          <label style={lbl}>Sähköposti</label><input value={inviteEmail} onChange={e=>setInviteEmail(e.target.value)} placeholder="johtaja@maahiset.net" style={inp} type="email"/>
           <label style={lbl}>Rooli</label>
           <select value={inviteRole} onChange={e=>setInviteRole(e.target.value)} style={inp}>
             <option value="lippukunnanjohtaja">Lippukunnanjohtaja</option><option value="johtaja">Johtaja</option><option value="apulaisjohtaja">Apulaisjohtaja</option>

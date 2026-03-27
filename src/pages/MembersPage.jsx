@@ -114,7 +114,7 @@ export default function MembersPage() {
     return m.status==="away"?"#f59e0b":m.status==="busy"?"#ef4444":m.status==="offline"?"var(--text3)":m.online?"#22c55e":"var(--text3)"
   }
   function statusLabel(m) {
-    return m.status==="away"?"🟡 Poissa":m.status==="busy"?"🔴 Älä häiritse":m.status==="offline"?"⚫ Offline":m.online?"🟢 Paikalla":("Viimeksi: "+formatLastSeen(m.lastSeen))
+    return m.status==="away"?"🟡 Poissa":m.status==="busy"?"🔴 Älä häiritse":m.status==="offline"?"⚫ Offline":m.online?"🟢 Paikalla":("Viimeksi paikalla: "+formatLastSeen(m.lastSeen))
   }
   function formatLastSeen(ts) {
     if (!ts) return "Ei tietoa"

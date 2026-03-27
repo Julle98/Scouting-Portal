@@ -354,7 +354,7 @@ export default function ProfilePage({ onSaved }) {
                     <div style={{ fontSize:12, color:"var(--text)" }}>
                       <div>{sid === (typeof window !== "undefined" ? localStorage.getItem("sessionId") : null) ? "📍 Tämä laite" : "📌 Muu laite"}</div>
                       <div style={{ fontSize:10, color:"var(--text2)" }}>{session.platform} · {session.userAgent?.slice(0,35)}...</div>
-                      <div style={{ fontSize:10, color:"var(--text2)" }}>Viimeksi: {session.lastSeen?.toDate ? session.lastSeen.toDate().toLocaleString("fi-FI") : "Ei tietoa"}</div>
+                      <div style={{ fontSize:10, color:"var(--text2)" }}>Viimeksi paikalla: {session.lastSeen?.toDate ? session.lastSeen.toDate().toLocaleString("fi-FI") : "Ei tietoa"}</div>
                     </div>
                     <button onClick={() => removeSession(sid)} style={{ ...btnGhost, fontSize:11, padding:"5px 8px" }}>Poista</button>
                   </div>
