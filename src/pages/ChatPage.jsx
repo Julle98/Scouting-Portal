@@ -78,6 +78,8 @@ export default function ChatPage() {
   const [showMention, setShowMention] = useState(false)
   const [mentionQuery, setMentionQuery] = useState("")
   const [mentionIndex, setMentionIndex] = useState(0)
+  const [condensedChat, setCondensedChat] = useState(localStorage.getItem("condensedChat") === "true")
+  const [chatOrder, setChatOrder] = useState(localStorage.getItem("chatOrder") || "default")
 
   const messagesEndRef = useRef(null)
   const gifSearchTimer = useRef(null)
@@ -235,6 +237,25 @@ export default function ChatPage() {
       textAreaRef.current.style.height = textAreaRef.current.scrollHeight + 'px'
     }
   }, [text])
+
+  useEffect(() => {
+    const onSettingsChange = (e) => {
+      const nextCondensed = Boolean(e?.detail?.condensedChat)
+      const nextOrder = e?.detail?.chatOrder || "default"
+      setCondensedChat(nextCondensed)
+      setChatOrder(nextOrder)
+    }
+    const onStorage = () => {
+      setCondensedChat(localStorage.getItem("condensedChat") === "true")
+      setChatOrder(localStorage.getItem("chatOrder") || "default")
+    }
+    window.addEventListener("chatSettingsChanged", onSettingsChange)
+    window.addEventListener("storage", onStorage)
+    return () => {
+      window.removeEventListener("chatSettingsChanged", onSettingsChange)
+      window.removeEventListener("storage", onStorage)
+    }
+  }, [])
 
   const activeTypingKey = activeChannel
     ? `channel_${activeChannel.id}`
@@ -572,6 +593,19 @@ export default function ChatPage() {
   const charsLeft = MAX_MSG_LENGTH - text.length
   const slowMode = activeChannel?.slowMode||0
   const canSend = text.trim().length>0||pendingGif||pendingFiles.length>0
+  const sortedChannels = [...channels].sort((a, b) => {
+    if (chatOrder === "unread") {
+      const aScore = (channelBadges[a.id]?.mentions || 0) * 10 + (channelBadges[a.id]?.unread || 0)
+      const bScore = (channelBadges[b.id]?.mentions || 0) * 10 + (channelBadges[b.id]?.unread || 0)
+      if (aScore !== bScore) return bScore - aScore
+    }
+    if (chatOrder === "activity") {
+      const aScore = (channelBadges[a.id]?.unread || 0)
+      const bScore = (channelBadges[b.id]?.unread || 0)
+      if (aScore !== bScore) return bScore - aScore
+    }
+    return (a.name || "").localeCompare(b.name || "", "fi")
+  })
   const typingNames = typingUsers.map(u=>u.displayName?.split(" ")[0]).filter(Boolean)
   const typingText = typingNames.length===0
     ? ""
@@ -613,7 +647,7 @@ export default function ChatPage() {
             <button onClick={e=>{e.stopPropagation();setShowNewChannel(true)}} style={iconBtn}>＋</button>
           </div>
           <div style={{overflowY:"auto",flex:1}}>
-            {channels.map(ch=>(
+            {sortedChannels.map(ch=>(
               <div key={ch.id} onClick={()=>{setActiveChannel(ch);setActiveDm(null);setDmSettings(false)}}
                 style={{padding:"6px 12px",cursor:"pointer",fontSize:13,borderRadius:6,margin:"1px 4px",display:"flex",alignItems:"center",gap:6,
                   background:activeChannel?.id===ch.id?"rgba(79,126,247,0.15)":"transparent",
@@ -758,14 +792,15 @@ export default function ChatPage() {
             <div style={{flex:1,overflowY:"auto",padding:"16px 20px",display:"flex",flexDirection:"column",gap:2}}>
               {messages.map((msg,i)=>{
                 const isMine=msg.senderId===user.uid
-                const showAvatar=i===0||messages[i-1]?.senderId!==msg.senderId
+                const rawShowAvatar=i===0||messages[i-1]?.senderId!==msg.senderId
+                const showAvatar=!condensedChat&&rawShowAvatar
                 const isHovered=hoverMsg===msg.id
                 const readCount=msg.readBy?msg.readBy.filter(id=>id!==msg.senderId).length:0
                 return (
                   <div key={msg.id}
                     onMouseEnter={()=>setHoverMsg(msg.id)} onMouseLeave={()=>setHoverMsg(null)}
                     onContextMenu={e=>{e.preventDefault();e.stopPropagation();setContextMenu({x:e.clientX,y:e.clientY,msg})}}
-                    style={{display:"flex",gap:10,alignItems:"flex-start",padding:"3px 6px",borderRadius:8,marginTop:showAvatar?10:0,position:"relative",
+                    style={{display:"flex",gap:condensedChat?6:10,alignItems:"flex-start",padding:condensedChat?"2px 6px":"3px 6px",borderRadius:8,marginTop:showAvatar?10:0,position:"relative",
                       background:isHovered?"rgba(255,255,255,0.03)":"transparent"}}>
                     {isHovered&&!msg.deleted&&(
                       <div style={{position:"absolute",right:10,top:-4,background:"#1e2535",border:"1px solid rgba(255,255,255,0.12)",borderRadius:10,padding:"3px 6px",display:"flex",gap:2,zIndex:5,boxShadow:"0 4px 16px rgba(0,0,0,0.4)"}}
@@ -781,11 +816,11 @@ export default function ChatPage() {
                         </>)}
                       </div>
                     )}
-                    <div style={{width:36,flexShrink:0,cursor:"pointer"}} onClick={()=>{const u2=allUsers.find(u=>u.id===msg.senderId);if(u2)setProfileModal(u2)}}>
+                    <div style={{width:condensedChat?6:36,flexShrink:0,cursor:condensedChat?"default":"pointer"}} onClick={()=>{if(condensedChat)return;const u2=allUsers.find(u=>u.id===msg.senderId);if(u2)setProfileModal(u2)}}>
                       {showAvatar&&<Avatar src={msg.senderPhoto} name={msg.senderName} size={36} />}
                     </div>
                     <div style={{flex:1,minWidth:0}}>
-                      {showAvatar&&(
+                      {(showAvatar||condensedChat)&&(
                         <div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:2}}>
                           <span style={{fontWeight:600,fontSize:13,cursor:"pointer"}} onClick={()=>{const u2=allUsers.find(u=>u.id===msg.senderId);if(u2)setProfileModal(u2)}}>{msg.senderName}</span>
                           <span style={{fontSize:11,color:"#545d75"}}>{formatTime(msg.createdAt)}</span>
@@ -838,7 +873,7 @@ export default function ChatPage() {
                 )
               })}
               {typingText && (
-                <div style={{padding:"8px 6px 2px 46px",fontSize:12,color:"#8b92a8",fontStyle:"italic"}}>
+                <div style={{padding:condensedChat?"8px 6px 2px 12px":"8px 6px 2px 46px",fontSize:12,color:"#8b92a8",fontStyle:"italic"}}>
                   {typingText}
                 </div>
               )}

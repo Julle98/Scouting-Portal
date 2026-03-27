@@ -1,13 +1,11 @@
 // src/pages/SettingsPage.jsx
 import { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
-import CHANGELOG from "../data/changelog.json";
+import CHANGELOG from "../public/changelog.json";
 
 const VERSION = import.meta.env.VITE_VERSION;
 const authorName = import.meta.env.VITE_AUTHOR_NAME;
 const authorLink = import.meta.env.VITE_AUTHOR_LINK;
-
-console.log(CHANGELOG[0].version);
 
 // Teema-asetukset CSS-muuttujilla
 const THEMES = {
@@ -44,6 +42,38 @@ function applyTheme(t) {
   localStorage.setItem("theme", t)
 }
 
+function parseVersion(v) {
+  if (!v) return [0, 0, 0]
+  return String(v)
+    .replace(/^v/i, "")
+    .split(".")
+    .slice(0, 3)
+    .map(n => Number(n) || 0)
+}
+
+function compareVersions(a, b) {
+  const aa = parseVersion(a)
+  const bb = parseVersion(b)
+  for (let i = 0; i < 3; i++) {
+    if (aa[i] > bb[i]) return 1
+    if (aa[i] < bb[i]) return -1
+  }
+  return 0
+}
+
+async function fetchRemoteChangelog() {
+  const candidates = ["/changelog.json", "/public/changelog.json"]
+  for (const url of candidates) {
+    try {
+      const res = await fetch(url, { cache: "no-store" })
+      if (!res.ok) continue
+      const data = await res.json()
+      if (Array.isArray(data) && data.length > 0) return data
+    } catch {}
+  }
+  return null
+}
+
 export default function SettingsPage() {
   const { profile } = useAuth()
   const [theme, setTheme]               = useState(localStorage.getItem("theme") || "dark")
@@ -51,29 +81,57 @@ export default function SettingsPage() {
   const [chatOrder, setChatOrder]       = useState(localStorage.getItem("chatOrder") || "default")
   const [showChangelog, setShowChangelog] = useState(false)
   const [checking, setChecking]         = useState(false)
+  const [changelogData, setChangelogData] = useState(Array.isArray(CHANGELOG) ? CHANGELOG : [])
+  const [latestRemoteVersion, setLatestRemoteVersion] = useState(null)
 
-  useEffect(() => { applyTheme(theme) }, [])
+  useEffect(() => {
+    applyTheme(theme)
+    const onThemeChange = (e) => {
+      const next = e?.detail?.theme || localStorage.getItem("theme") || "dark"
+      setTheme(next)
+      applyTheme(next)
+    }
+    window.addEventListener("themeChanged", onThemeChange)
+    return () => window.removeEventListener("themeChanged", onThemeChange)
+  }, [theme])
 
   function handleTheme(t) {
     setTheme(t)
     applyTheme(t)
+    window.dispatchEvent(new CustomEvent("themeChanged", { detail: { theme: t } }))
   }
 
   function saveChatSettings() {
-    localStorage.setItem("condensedChat", condensedChat)
-    localStorage.setItem("chatOrder", chatOrder)
+    localStorage.setItem("condensedChat", String(condensedChat))
+    localStorage.setItem("chatOrder", String(chatOrder))
     // Lähetä globaali event muille komponenteille
     window.dispatchEvent(new CustomEvent("chatSettingsChanged", { detail: { condensedChat, chatOrder } }))
     window.__pushToast?.("Asetukset tallennettu ✓", "success")
   }
 
-  function checkForUpdates() {
+  async function checkForUpdates() {
     setChecking(true)
-    setTimeout(() => {
-      setChecking(false)
+    try {
+      const remote = await fetchRemoteChangelog()
+      const source = remote || changelogData
+      if (remote) setChangelogData(remote)
+
+      const latest = source?.[0]?.version || VERSION
+      setLatestRemoteVersion(latest)
+
+      if (compareVersions(latest, VERSION) > 0) {
+        window.__pushToast?.(`Uusi versio ${latest} saatavilla - päivitä sivu`, "info")
+        const shouldReload = window.confirm(`Uusi versio (${latest}) on saatavilla. Päivitetäänkö sivu nyt?`)
+        if (shouldReload) window.location.reload()
+      } else {
+        window.__pushToast?.(`Versio ${VERSION} - ajantasainen ✓`, "success")
+      }
       setShowChangelog(true)
-      window.__pushToast?.(`Versio ${VERSION} — ajantasainen ✓`, "success")
-    }, 1200)
+    } catch {
+      window.__pushToast?.("Päivitystarkistus epäonnistui", "error")
+    } finally {
+      setChecking(false)
+    }
   }
 
   const themeBtn = (val, label) => (
@@ -157,6 +215,17 @@ export default function SettingsPage() {
               </button>
             </div>
           </div>
+          {latestRemoteVersion && compareVersions(latestRemoteVersion, VERSION) > 0 && (
+            <div style={{ marginTop:12, padding:"10px 12px", background:"rgba(245,158,11,0.1)", border:"1px solid rgba(245,158,11,0.25)", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"space-between", gap:10 }}>
+              <span style={{ fontSize:12, color:"#f59e0b" }}>Uusi versio {latestRemoteVersion} on saatavilla.</span>
+              <button
+                onClick={() => window.location.reload()}
+                style={{ padding:"6px 10px", borderRadius:6, border:"1px solid rgba(245,158,11,0.35)", background:"rgba(245,158,11,0.16)", color:"#f59e0b", cursor:"pointer", fontSize:12, fontFamily:"system-ui" }}
+              >
+                Päivitä sivu
+              </button>
+            </div>
+          )}
         </Section>
       </div>
 
@@ -171,7 +240,7 @@ export default function SettingsPage() {
               <button onClick={() => setShowChangelog(false)}
                 style={{ background:"transparent", border:"none", color:"#8b92a8", cursor:"pointer", fontSize:18 }}>✕</button>
             </div>
-            {CHANGELOG.map(entry => (
+            {changelogData.map(entry => (
               <div key={entry.version} style={{ marginBottom:24 }}>
                 <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
                   <span style={{ fontWeight:600, fontSize:14, color:"#e8eaf0" }}>v{entry.version}</span>

@@ -30,6 +30,39 @@ const PAGE_LABELS = {
   "/asetukset":    "Asetukset",
 }
 
+const THEMES = {
+  dark: {
+    "--bg":       "#0e1117",
+    "--bg2":      "#161b27",
+    "--bg3":      "#1e2535",
+    "--text":     "#e8eaf0",
+    "--text2":    "#8b92a8",
+    "--text3":    "#545d75",
+    "--border":   "rgba(255,255,255,0.07)",
+    "--border2":  "rgba(255,255,255,0.12)",
+  },
+  light: {
+    "--bg":       "#f5f6fa",
+    "--bg2":      "#ffffff",
+    "--bg3":      "#eef0f5",
+    "--text":     "#1a1d27",
+    "--text2":    "#4a5168",
+    "--text3":    "#8b92a8",
+    "--border":   "rgba(0,0,0,0.08)",
+    "--border2":  "rgba(0,0,0,0.14)",
+  }
+}
+
+function applyTheme(t) {
+  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches
+  const resolved = t === "auto" ? (prefersDark ? "dark" : "light") : t
+  const vars = THEMES[resolved] || THEMES.dark
+  const root = document.documentElement
+  Object.entries(vars).forEach(([k,v]) => root.style.setProperty(k, v))
+  document.body.style.background = vars["--bg"]
+  document.body.style.color      = vars["--text"]
+}
+
 // Aseta otsikko myös kirjautumissivulle
 if (typeof document !== "undefined") {
   document.title = "Maahiset-portaali"
@@ -65,6 +98,32 @@ export default function MainLayout() {
     const pageLabel = PAGE_LABELS[location.pathname] || "Portaali"
     document.title = `${pageLabel} - Maahiset-portaali`
   }, [location.pathname])
+
+  useEffect(() => {
+    const applyFromStorage = () => {
+      const saved = localStorage.getItem("theme") || "dark"
+      applyTheme(saved)
+    }
+
+    applyFromStorage()
+
+    const onThemeChanged = () => applyFromStorage()
+    const media = window.matchMedia("(prefers-color-scheme: dark)")
+    const onMediaChange = () => {
+      const saved = localStorage.getItem("theme") || "dark"
+      if (saved === "auto") applyTheme("auto")
+    }
+
+    window.addEventListener("themeChanged", onThemeChanged)
+    if (media.addEventListener) media.addEventListener("change", onMediaChange)
+    else media.addListener(onMediaChange)
+
+    return () => {
+      window.removeEventListener("themeChanged", onThemeChanged)
+      if (media.removeEventListener) media.removeEventListener("change", onMediaChange)
+      else media.removeListener(onMediaChange)
+    }
+  }, [])
 
   useEffect(() => {
     if (user && profile?.displayName) {
