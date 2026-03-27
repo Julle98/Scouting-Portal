@@ -1,11 +1,11 @@
 // src/pages/SettingsPage.jsx
 import { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
-import CHANGELOG from "../public/changelog.json";
 
 const VERSION = import.meta.env.VITE_VERSION;
 const authorName = import.meta.env.VITE_AUTHOR_NAME;
 const authorLink = import.meta.env.VITE_AUTHOR_LINK;
+const LAST_PROMPTED_UPDATE_KEY = import.meta.env.VITE_LAST_PROMPTED_UPDATE_KEY;
 
 // Teema-asetukset CSS-muuttujilla
 const THEMES = {
@@ -62,7 +62,7 @@ function compareVersions(a, b) {
 }
 
 async function fetchRemoteChangelog() {
-  const candidates = ["/changelog.json", "/public/changelog.json"]
+  const candidates = ["/changelog.json"]
   for (const url of candidates) {
     try {
       const res = await fetch(url, { cache: "no-store" })
@@ -76,13 +76,20 @@ async function fetchRemoteChangelog() {
 
 export default function SettingsPage() {
   const { profile } = useAuth()
+  const currentVersion = VERSION || "0.0.0"
   const [theme, setTheme]               = useState(localStorage.getItem("theme") || "dark")
   const [condensedChat, setCondensedChat] = useState(localStorage.getItem("condensedChat") === "true")
   const [chatOrder, setChatOrder]       = useState(localStorage.getItem("chatOrder") || "default")
   const [showChangelog, setShowChangelog] = useState(false)
   const [checking, setChecking]         = useState(false)
-  const [changelogData, setChangelogData] = useState(Array.isArray(CHANGELOG) ? CHANGELOG : [])
+  const [changelogData, setChangelogData] = useState([])
   const [latestRemoteVersion, setLatestRemoteVersion] = useState(null)
+
+  useEffect(() => {
+    fetchRemoteChangelog().then(remote => {
+      if (remote) setChangelogData(remote)
+    }).catch(() => {})
+  }, [])
 
   useEffect(() => {
     applyTheme(theme)
@@ -116,15 +123,27 @@ export default function SettingsPage() {
       const source = remote || changelogData
       if (remote) setChangelogData(remote)
 
-      const latest = source?.[0]?.version || VERSION
+      const latest = source?.[0]?.version || currentVersion
       setLatestRemoteVersion(latest)
+      const alreadyPrompted = localStorage.getItem(LAST_PROMPTED_UPDATE_KEY) === String(latest)
 
-      if (compareVersions(latest, VERSION) > 0) {
-        window.__pushToast?.(`Uusi versio ${latest} saatavilla - päivitä sivu`, "info")
-        const shouldReload = window.confirm(`Uusi versio (${latest}) on saatavilla. Päivitetäänkö sivu nyt?`)
-        if (shouldReload) window.location.reload()
+      if (compareVersions(latest, currentVersion) > 0) {
+        if (!alreadyPrompted) {
+          localStorage.setItem(LAST_PROMPTED_UPDATE_KEY, String(latest))
+          window.__pushToast?.(`Uusi versio ${latest} saatavilla - päivitä sivu`, "info")
+          const shouldReload = window.confirm(`Uusi versio (${latest}) on saatavilla. Päivitetäänkö sivu nyt?`)
+          if (shouldReload) {
+            const url = new URL(window.location.href)
+            url.searchParams.set("_refresh", String(Date.now()))
+            window.location.href = url.toString()
+            return
+          }
+        } else {
+          window.__pushToast?.(`Uusi versio ${latest} on edelleen saatavilla`, "info")
+        }
       } else {
-        window.__pushToast?.(`Versio ${VERSION} - ajantasainen ✓`, "success")
+        localStorage.removeItem(LAST_PROMPTED_UPDATE_KEY)
+        window.__pushToast?.(`Versio ${currentVersion} - ajantasainen ✓`, "success")
       }
       setShowChangelog(true)
     } catch {
@@ -195,7 +214,7 @@ export default function SettingsPage() {
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:10 }}>
             <div>
               <div style={{ fontSize:13, color:"#8b92a8" }}>
-                Versio <strong style={{ color:"var(--text, #e8eaf0)" }}>{VERSION}</strong>
+                Versio <strong style={{ color:"var(--text, #e8eaf0)" }}>{currentVersion}</strong>
               </div>
                 <div style={{ fontSize:12, color:"#545d75", marginTop:3 }}>
                 Sivuston tekijä:{" "}
@@ -215,11 +234,16 @@ export default function SettingsPage() {
               </button>
             </div>
           </div>
-          {latestRemoteVersion && compareVersions(latestRemoteVersion, VERSION) > 0 && (
+          {latestRemoteVersion && compareVersions(latestRemoteVersion, currentVersion) > 0 && (
             <div style={{ marginTop:12, padding:"10px 12px", background:"rgba(245,158,11,0.1)", border:"1px solid rgba(245,158,11,0.25)", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"space-between", gap:10 }}>
               <span style={{ fontSize:12, color:"#f59e0b" }}>Uusi versio {latestRemoteVersion} on saatavilla.</span>
               <button
-                onClick={() => window.location.reload()}
+                onClick={() => {
+                  localStorage.setItem(LAST_PROMPTED_UPDATE_KEY, String(latestRemoteVersion))
+                  const url = new URL(window.location.href)
+                  url.searchParams.set("_refresh", String(Date.now()))
+                  window.location.href = url.toString()
+                }}
                 style={{ padding:"6px 10px", borderRadius:6, border:"1px solid rgba(245,158,11,0.35)", background:"rgba(245,158,11,0.16)", color:"#f59e0b", cursor:"pointer", fontSize:12, fontFamily:"system-ui" }}
               >
                 Päivitä sivu
@@ -244,7 +268,7 @@ export default function SettingsPage() {
               <div key={entry.version} style={{ marginBottom:24 }}>
                 <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
                   <span style={{ fontWeight:600, fontSize:14, color:"#e8eaf0" }}>v{entry.version}</span>
-                  {entry.version === VERSION && (
+                  {compareVersions(entry.version, currentVersion) === 0 && (
                     <span style={{ fontSize:10, background:"rgba(34,197,94,0.15)", color:"#22c55e", border:"1px solid rgba(34,197,94,0.3)", padding:"1px 7px", borderRadius:10 }}>Nykyinen</span>
                   )}
                   <span style={{ fontSize:12, color:"#545d75" }}>{entry.date}</span>
