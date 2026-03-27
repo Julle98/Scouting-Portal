@@ -439,8 +439,8 @@ export default function LoginPage({ initialLegal = null }) {
           showBackToLogin={isLegalRoute}
           onBackToLogin={() => navigate("/kirjaudu")}
           onClose={() => {
+            setShowTermsModal(null)
             if (isLegalRoute) navigate("/kirjaudu")
-            else setShowTermsModal(null)
           }}
         />
       )}

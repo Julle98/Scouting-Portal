@@ -671,7 +671,19 @@ export default function EquipmentPage() {
             </div>
 
             <label style={lbl}>Sijainti</label>
-            <input value={form.location} onChange={e => setForm(s => ({...s, location:e.target.value}))} placeholder="esim. Varasto A, hylly 2" style={inp} />
+            <div style={{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap"}}>
+              {["Jousiksen kolo","Tähtiksen kolo","Kämppä"].map(loc=>(
+                <button key={loc} type="button"
+                  onClick={()=>setForm(s=>({...s,location:loc}))}
+                  style={{padding:"4px 10px",fontSize:12,borderRadius:20,cursor:"pointer",fontFamily:"system-ui",
+                    background:form.location===loc?"rgba(79,126,247,0.2)":"var(--bg3)",
+                    border:form.location===loc?"1px solid #4f7ef7":"1px solid var(--border2)",
+                    color:form.location===loc?"#4f7ef7":"var(--text2)"}}>
+                  {loc}
+                </button>
+              ))}
+            </div>
+            <input value={form.location} onChange={e => setForm(s => ({...s, location:e.target.value}))} placeholder="tai kirjoita oma sijainti..." style={inp} />
 
             <label style={lbl}>Kunto</label>
             <select value={form.condition} onChange={e => setForm(s => ({...s, condition:e.target.value}))} style={inp}>

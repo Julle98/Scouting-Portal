@@ -29,6 +29,11 @@ function toChatSlug(value = "") {
     .replace(/[^a-z0-9-äöå]/g, "")
 }
 
+function formatChannelLabel(channel) {
+  if (!channel) return ""
+  return channel.type === "private" ? `#🔒 ${channel.name}` : `# ${channel.name}`
+}
+
 export default function ChatPage() {
   const { user, profile, isAdmin } = useAuth()
   const navigate = useNavigate()
@@ -96,6 +101,14 @@ export default function ChatPage() {
   const [mentionStart, setMentionStart] = useState(-1)
   const [condensedChat, setCondensedChat] = useState(localStorage.getItem("condensedChat") === "true")
   const [chatOrder, setChatOrder] = useState(localStorage.getItem("chatOrder") || "default")
+  const [sidebarCtxMenu, setSidebarCtxMenu] = useState(null)
+  const [pinnedItems, setPinnedItems] = useState(() => { try { return JSON.parse(localStorage.getItem("pinnedItems") || "{}") } catch { return {} } })
+  const [hiddenDmUsers, setHiddenDmUsers] = useState(() => { try { return JSON.parse(localStorage.getItem("hiddenDmUsers") || "{}") } catch { return {} } })
+  const [sidebarWidth, setSidebarWidth] = useState(() => { const s = parseInt(localStorage.getItem("sidebarWidth")); return isNaN(s) ? 220 : Math.max(160, Math.min(480, s)) })
+  const [hiddenNotes, setHiddenNotes] = useState(() => localStorage.getItem("hiddenNotes") === "true")
+  const sidebarDragRef = useRef(false)
+  const sidebarDragStartXRef = useRef(0)
+  const sidebarDragStartWRef = useRef(0)
 
   const messagesEndRef = useRef(null)
   const gifSearchTimer = useRef(null)
@@ -405,6 +418,12 @@ export default function ChatPage() {
   }, [])
 
   useEffect(() => {
+    if (typeof window === "undefined" || !("Notification" in window)) return
+    if (Notification.permission !== "default") return
+    Notification.requestPermission().catch(() => {})
+  }, [])
+
+  useEffect(() => {
     const key = activeTypingKey
     return () => {
       clearTimeout(typingTimerRef.current)
@@ -413,6 +432,32 @@ export default function ChatPage() {
       }
     }
   }, [activeTypingKey, user?.uid])
+
+  // Sivupalkin leveyden pysyvyys
+  useEffect(() => {
+    try { localStorage.setItem("sidebarWidth", String(sidebarWidth)) } catch {}
+  }, [sidebarWidth])
+
+  // Sivupalkin vedettävyys
+  useEffect(() => {
+    function onMouseMove(e) {
+      if (!sidebarDragRef.current) return
+      const delta = e.clientX - sidebarDragStartXRef.current
+      const newW = Math.max(160, Math.min(480, sidebarDragStartWRef.current + delta))
+      setSidebarWidth(newW)
+    }
+    function onMouseUp() {
+      sidebarDragRef.current = false
+      document.body.style.cursor = ""
+      document.body.style.userSelect = ""
+    }
+    document.addEventListener("mousemove", onMouseMove)
+    document.addEventListener("mouseup", onMouseUp)
+    return () => {
+      document.removeEventListener("mousemove", onMouseMove)
+      document.removeEventListener("mouseup", onMouseUp)
+    }
+  }, [])
 
   function isChannelMuted(id) {
     const until = mutedChannels[id]
@@ -423,6 +468,24 @@ export default function ChatPage() {
 
   function pushNotif(type,body,title,data) {
     if (profile?.status === 'busy') return
+
+    if (
+      type === "chat" &&
+      typeof window !== "undefined" &&
+      "Notification" in window &&
+      document.visibilityState === "hidden" &&
+      Notification.permission === "granted"
+    ) {
+      const popup = new Notification(title || "Uusi viesti", {
+        body: body || "Sinulle tuli uusi viesti",
+        tag: data?.id ? `chat-${data.id}` : undefined,
+      })
+      popup.onclick = () => {
+        window.focus()
+        popup.close()
+      }
+    }
+
     const id = Date.now()
     setNotifications(prev=>[...prev,{id,type,body,title,data}])
     setTimeout(()=>setNotifications(prev=>prev.filter(n=>n.id!==id)),5000)
@@ -547,6 +610,49 @@ export default function ChatPage() {
     })
     setContextMenu(null)
     pushNotif("info","Viesti raportoitu","Moderointi")
+  }
+
+  function togglePin(id) {
+    setPinnedItems(prev => {
+      const next = { ...prev }
+      if (next[id]) delete next[id]
+      else next[id] = true
+      try { localStorage.setItem("pinnedItems", JSON.stringify(next)) } catch {}
+      return next
+    })
+    setSidebarCtxMenu(null)
+  }
+
+  async function leaveChannel(ch) {
+    if (!ch) return
+    await updateDoc(doc(db, "channels", ch.id), { members: arrayRemove(user.uid) })
+    if (activeChannel?.id === ch.id) { setActiveChannel(null); navigate("/chat") }
+    pushNotif("info", `Poistuit kanavalta #${ch.name}`)
+    setSidebarCtxMenu(null)
+  }
+
+  function hideDmUser(uid) {
+    setHiddenDmUsers(prev => {
+      const next = { ...prev, [uid]: true }
+      try { localStorage.setItem("hiddenDmUsers", JSON.stringify(next)) } catch {}
+      return next
+    })
+    if (activeDm?.otherUser?.id === uid) { setActiveDm(null); navigate("/chat") }
+    setSidebarCtxMenu(null)
+  }
+
+  async function reportSidebarItem(item, type) {
+    await addDoc(collection(db, "moderation"), {
+      type,
+      targetId: item.id,
+      targetName: item.name || item.displayName,
+      reporterId: user.uid,
+      reporterName: profile?.displayName,
+      status: "pending",
+      createdAt: serverTimestamp(),
+    })
+    pushNotif("info", "Raportti lähetetty moderaattoreille")
+    setSidebarCtxMenu(null)
   }
 
   async function createChannel() {
@@ -814,6 +920,9 @@ export default function ChatPage() {
   const slowMode = activeChannel?.slowMode||0
   const canSend = !activeDm?.closedAt && (text.trim().length>0||pendingGif||pendingFiles.length>0)
   const sortedChannels = [...channels].sort((a, b) => {
+    const aPinned = pinnedItems[a.id] ? 1 : 0
+    const bPinned = pinnedItems[b.id] ? 1 : 0
+    if (aPinned !== bPinned) return bPinned - aPinned
     if (chatOrder === "unread") {
       const aScore = (channelBadges[a.id]?.mentions || 0) * 10 + (channelBadges[a.id]?.unread || 0)
       const bScore = (channelBadges[b.id]?.mentions || 0) * 10 + (channelBadges[b.id]?.unread || 0)
@@ -869,22 +978,31 @@ export default function ChatPage() {
           : { text: "Odottaa hyväksyntää", color: "#f59e0b", bg: "rgba(245,158,11,0.12)" }
 
   return (
-    <div style={{display:"flex",flex:1,overflow:"hidden"}} onClick={()=>{setContextMenu(null);setShowEmoji(false);setShowGif(false);setHoverMsg(null);setShowAttach(false)}}>
+    <div style={{display:"flex",flex:1,overflow:"hidden"}} onClick={()=>{setContextMenu(null);setSidebarCtxMenu(null);setShowEmoji(false);setShowGif(false);setHoverMsg(null);setShowAttach(false)}}>
 
       {/* Sidebar */}
       {showSidebar && (
-        <div style={{width:200,background:"var(--bg2)",borderRight:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        <div style={{width:sidebarWidth,minWidth:160,maxWidth:480,background:"var(--bg2)",borderRight:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",position:"relative",flexShrink:0}}>
+          {/* Vetorajapinta */}
+          <div
+            onMouseDown={e=>{e.preventDefault();sidebarDragRef.current=true;sidebarDragStartXRef.current=e.clientX;sidebarDragStartWRef.current=sidebarWidth;document.body.style.cursor="col-resize";document.body.style.userSelect="none"}}
+            style={{position:"absolute",right:0,top:0,bottom:0,width:5,cursor:"col-resize",zIndex:10,background:"transparent",transition:"background 0.15s"}}
+            onMouseEnter={e=>e.currentTarget.style.background="rgba(79,126,247,0.35)"}
+            onMouseLeave={e=>{if(!sidebarDragRef.current)e.currentTarget.style.background="transparent"}}
+          />
           <div style={{padding:"12px 10px 6px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <span style={{fontSize:10,fontWeight:600,color:"var(--text3)",textTransform:"uppercase",letterSpacing:"0.08em"}}>Kanavat</span>
-            <button onClick={e=>{e.stopPropagation();setShowNewChannel(true)}} style={iconBtn}>＋</button>
+            <button onClick={e=>{e.stopPropagation();setShowNewChannel(true)}} style={sectionAddBtn}>＋</button>
           </div>
           <div style={{overflowY:"auto",flex:1}}>
             {sortedChannels.map(ch=>(
               <div key={ch.id} onClick={()=>selectChannel(ch)}
+                onContextMenu={e=>{e.preventDefault();e.stopPropagation();setSidebarCtxMenu({x:e.clientX,y:e.clientY,type:"channel",item:ch})}}
                 style={{padding:"6px 12px",cursor:"pointer",fontSize:13,borderRadius:6,margin:"1px 4px",display:"flex",alignItems:"center",gap:6,
                   background:activeChannel?.id===ch.id?"rgba(79,126,247,0.15)":"transparent",
                   color:activeChannel?.id===ch.id?"#4f7ef7":"var(--text2)"}}>
-                <span style={{flex:1}}>{ch.type==="private"?"🔒":"#"} {ch.name}</span>
+                <span style={{flex:1}}>{formatChannelLabel(ch)}</span>
+                {pinnedItems[ch.id]&&<span style={{fontSize:10,opacity:0.6}}>📌</span>}
                 {channelBadges[ch.id]?.mentions > 0 && (
                   <span style={{minWidth:18,height:18,display:"inline-flex",alignItems:"center",justifyContent:"center",borderRadius:"50%",background:"#ef4444",color:"#fff",fontSize:11,fontWeight:700}}>
                     {channelBadges[ch.id].mentions}
@@ -898,21 +1016,33 @@ export default function ChatPage() {
             {/* DM-osio */}
             <div style={{padding:"12px 10px 6px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
               <span style={{fontSize:10,fontWeight:600,color:"var(--text3)",textTransform:"uppercase",letterSpacing:"0.08em"}}>Yksityisviestit</span>
-              <button onClick={e=>{e.stopPropagation();setShowNewDM(true)}} style={iconBtn} title="Uusi yksityisviesti">＋</button>
+              <button onClick={e=>{e.stopPropagation();setShowNewDM(true)}} style={sectionAddBtn} title="Uusi yksityisviesti">＋</button>
             </div>
 
             {/* Muistiinpanot */}
-            <div onClick={()=>{const me=allUsers.find(u=>u.id===user.uid)||{id:user.uid,displayName:"Muistiinpanot"};openDM(me)}}
-              style={{padding:"5px 12px",cursor:"pointer",fontSize:13,borderRadius:6,margin:"1px 4px",display:"flex",alignItems:"center",gap:7,
-                background:activeDm?.isSelfNote?"rgba(79,126,247,0.15)":"transparent",
-                color:activeDm?.isSelfNote?"#4f7ef7":"var(--text2)"}}>
-              <span style={{fontSize:16,lineHeight:"22px",flexShrink:0}}>📝</span>
-              <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>Muistiinpanot</span>
-            </div>
+            {hiddenNotes ? (
+              <div
+                onContextMenu={e=>{e.preventDefault();e.stopPropagation();setSidebarCtxMenu({x:e.clientX,y:e.clientY,type:"notes"})}}
+                title="Muistiinpanot (piilotettu) — oikeaklikkaa"
+                style={{padding:"4px 12px",cursor:"default",fontSize:11,borderRadius:6,margin:"1px 4px",display:"flex",alignItems:"center",gap:7,color:"var(--text3)",opacity:0.35,userSelect:"none"}}>
+                <span style={{fontSize:14,flexShrink:0}}>📝</span>
+                <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>···</span>
+              </div>
+            ) : (
+              <div onClick={()=>{const me=allUsers.find(u=>u.id===user.uid)||{id:user.uid,displayName:"Muistiinpanot"};openDM(me)}}
+                onContextMenu={e=>{e.preventDefault();e.stopPropagation();setSidebarCtxMenu({x:e.clientX,y:e.clientY,type:"notes"})}}
+                style={{padding:"5px 12px",cursor:"pointer",fontSize:13,borderRadius:6,margin:"1px 4px",display:"flex",alignItems:"center",gap:7,
+                  background:activeDm?.isSelfNote?"rgba(79,126,247,0.15)":"transparent",
+                  color:activeDm?.isSelfNote?"#4f7ef7":"var(--text2)"}}>
+                <span style={{fontSize:16,lineHeight:"22px",flexShrink:0}}>📝</span>
+                <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>Muistiinpanot</span>
+              </div>
+            )}
 
             {/* DM-lista */}
-            {allUsers.filter(u2=>u2.id!==user.uid).map(u2=>(
+            {allUsers.filter(u2=>u2.id!==user.uid&&!hiddenDmUsers[u2.id]).map(u2=>(
               <div key={u2.id} onClick={()=>openDM(u2)}
+                onContextMenu={e=>{e.preventDefault();e.stopPropagation();const dmId=[user.uid,u2.id].sort().join("_");setSidebarCtxMenu({x:e.clientX,y:e.clientY,type:"dm",item:u2,dmId})}}
                 style={{padding:"5px 10px",cursor:"pointer",fontSize:13,borderRadius:6,margin:"1px 4px",display:"flex",alignItems:"center",gap:7,
                   background:activeDm?.otherUser?.id===u2.id&&!activeDm?.isSelfNote?"rgba(79,126,247,0.15)":"transparent",
                   color:activeDm?.otherUser?.id===u2.id&&!activeDm?.isSelfNote?"#4f7ef7":"var(--text2)"}}>
@@ -921,7 +1051,12 @@ export default function ChatPage() {
                   <div style={{position:"absolute",bottom:0,right:0,width:7,height:7,borderRadius:"50%",border:"1.5px solid var(--bg2)",
                     background:statusColor(u2)}} />
                 </div>
-                <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",lineHeight:"22px"}}>{u2.displayName?.split(" ")[0]}</span>
+                <div style={{flex:1,minWidth:0,lineHeight:1.25}}>
+                  <div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",lineHeight:"18px",fontSize:13}}>{u2.displayName}</div>
+                  {(u2.role||u2.title)&&<div style={{fontSize:9,color:"var(--text3)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",opacity:0.65}}>{[u2.role,u2.title].filter(Boolean).join(" | ")}</div>}
+                </div>
+                {pinnedItems[u2.id]&&<span style={{fontSize:10,opacity:0.6}}>📌</span>}
+                {isChannelMuted([user.uid,u2.id].sort().join("_"))&&<span style={{fontSize:10}}>🔕</span>}
                 {dmBadges[[user.uid,u2.id].sort().join("_")]?.unread > 0 && (
                   <span style={{minWidth:18,height:18,display:"inline-flex",alignItems:"center",justifyContent:"center",borderRadius:"50%",background:"#ef4444",color:"#fff",fontSize:11,fontWeight:700}}>
                     {dmBadges[[user.uid,u2.id].sort().join("_")].unread}
@@ -932,7 +1067,7 @@ export default function ChatPage() {
 
             <div style={{padding:"12px 10px 6px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
               <span style={{fontSize:10,fontWeight:600,color:"var(--text3)",textTransform:"uppercase",letterSpacing:"0.08em"}}>Kalustovaraukset</span>
-              <button onClick={e=>{e.stopPropagation();setShowEquipmentChatPicker(true)}} style={iconBtn} title="Kalustovaraukset">＋</button>
+                <button onClick={e=>{e.stopPropagation();setShowEquipmentChatPicker(true)}} style={sectionAddBtn} title="Kalustovaraukset">＋</button>
             </div>
 
             {equipmentChats.length === 0 && (
@@ -943,6 +1078,7 @@ export default function ChatPage() {
 
             {openEquipmentChats.map(chat => (
               <div key={chat.id} onClick={()=>openEquipmentChat(chat)}
+                onContextMenu={e=>{e.preventDefault();e.stopPropagation();setSidebarCtxMenu({x:e.clientX,y:e.clientY,type:"equipment",item:chat})}}
                 style={{padding:"6px 10px",cursor:"pointer",fontSize:13,borderRadius:6,margin:"1px 4px",display:"flex",alignItems:"center",gap:8,
                   background:activeDm?.id===chat.id?"rgba(79,126,247,0.15)":"transparent",
                   color:activeDm?.id===chat.id?"#4f7ef7":"var(--text2)",
@@ -957,6 +1093,7 @@ export default function ChatPage() {
                     {chat.closedAt ? " · Suljettu" : ""}
                   </div>
                 </div>
+                {pinnedItems[chat.id]&&<span style={{fontSize:10,opacity:0.6}}>📌</span>}
                 {equipmentBadges[chat.id]?.unread > 0 && (
                   <span style={{minWidth:18,height:18,display:"inline-flex",alignItems:"center",justifyContent:"center",borderRadius:"50%",background:"#ef4444",color:"#fff",fontSize:11,fontWeight:700}}>
                     {equipmentBadges[chat.id].unread}
@@ -973,6 +1110,7 @@ export default function ChatPage() {
                 </div>
                 {archivedEquipmentChats.map(chat => (
                   <div key={chat.id} onClick={()=>openEquipmentChat(chat)}
+                    onContextMenu={e=>{e.preventDefault();e.stopPropagation();setSidebarCtxMenu({x:e.clientX,y:e.clientY,type:"equipment",item:chat})}}
                     style={{padding:"6px 10px",cursor:"pointer",fontSize:13,borderRadius:6,margin:"1px 4px",display:"flex",alignItems:"center",gap:8,
                       background:activeDm?.id===chat.id?"rgba(245,158,11,0.15)":"transparent",
                       color:activeDm?.id===chat.id?"#f59e0b":"var(--text2)",
@@ -1027,7 +1165,7 @@ export default function ChatPage() {
                     openChannelInfo();
                   }}
                 >
-                  {`#${activeChannel.name}`}
+                  {formatChannelLabel(activeChannel)}
                 </span>
                 {activeChannel?.description&&<span style={{fontSize:12,color:"var(--text3)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{activeChannel.description}</span>}
                 {slowMode>0&&<span style={{fontSize:11,color:"var(--text2)",background:"rgba(255,255,255,0.06)",padding:"1px 7px",borderRadius:10}}>🐌 {slowMode}s</span>}
@@ -1566,6 +1704,80 @@ export default function ChatPage() {
         </div>
       )}
 
+      {/* Sivupalkin oikeaklikkausvalikko */}
+      {sidebarCtxMenu&&(
+        <div style={{position:"fixed",left:sidebarCtxMenu.x,top:sidebarCtxMenu.y,background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:10,padding:6,zIndex:100,minWidth:190,boxShadow:"0 8px 32px rgba(0,0,0,0.6)"}}
+          onClick={e=>e.stopPropagation()}>
+          {/* --- KANAVA --- */}
+          {sidebarCtxMenu.type==="channel"&&(<>
+            <div onClick={()=>togglePin(sidebarCtxMenu.item.id)} style={ctxItem}>
+              {pinnedItems[sidebarCtxMenu.item.id]?"📌 Poista kiinnitys":"📌 Kiinnitä kanava"}
+            </div>
+            <div style={{height:"1px",background:"var(--border)",margin:"4px 0"}}/>
+            <div style={{padding:"4px 10px 2px",fontSize:10,color:"var(--text3)"}}>Mykistä</div>
+            {[15,60,480,1440].map(m=>(
+              <div key={m} onClick={()=>{setMutedChannels(prev=>({...prev,[sidebarCtxMenu.item.id]:Date.now()+m*60000}));pushNotif("info",`Mykistetty ${m<60?m+" min":m<1440?m/60+" t":"24 t"}`);setSidebarCtxMenu(null)}} style={ctxItem}>
+                🔕 {m<60?m+" min":m<1440?m/60+" t":"24 t"}
+              </div>
+            ))}
+            {isChannelMuted(sidebarCtxMenu.item.id)&&(
+              <div onClick={()=>{setMutedChannels(prev=>{const n={...prev};delete n[sidebarCtxMenu.item.id];return n});setSidebarCtxMenu(null)}} style={ctxItem}>🔔 Poista mykistys</div>
+            )}
+            <div style={{height:"1px",background:"var(--border)",margin:"4px 0"}}/>
+            <div onClick={()=>{selectChannel(sidebarCtxMenu.item);setShowChannelInfo(true);setSidebarCtxMenu(null)}} style={ctxItem}>ℹ️ Kanavan tiedot</div>
+            <div onClick={()=>reportSidebarItem(sidebarCtxMenu.item,"channel_report")} style={{...ctxItem,color:"var(--text2)"}}>🚩 Raportoi kanava</div>
+            {sidebarCtxMenu.item.type==="private"&&sidebarCtxMenu.item.members?.includes(user.uid)&&(
+              <>
+                <div style={{height:"1px",background:"var(--border)",margin:"4px 0"}}/>
+                <div onClick={()=>leaveChannel(sidebarCtxMenu.item)} style={{...ctxItem,color:"#f87171"}}>🚪 Poistu ryhmästä</div>
+              </>
+            )}
+          </>)}
+
+          {/* --- MUISTIINPANOT --- */}
+          {sidebarCtxMenu.type==="notes"&&(<>
+            <div onClick={()=>{const me=allUsers.find(u=>u.id===user.uid)||{id:user.uid,displayName:"Muistiinpanot"};openDM(me);setSidebarCtxMenu(null)}} style={ctxItem}>📝 Avaa muistiinpanot</div>
+            <div style={{height:"1px",background:"var(--border)",margin:"4px 0"}}/>
+            <div onClick={()=>{const me=allUsers.find(u=>u.id===user.uid)||profile;if(me)setProfileModal(me);setSidebarCtxMenu(null)}} style={ctxItem}>👤 Omat tiedot</div>
+            <div style={{height:"1px",background:"var(--border)",margin:"4px 0"}}/>
+            <div onClick={()=>{const next=!hiddenNotes;setHiddenNotes(next);try{localStorage.setItem("hiddenNotes",String(next))}catch{};setSidebarCtxMenu(null)}} style={{...ctxItem,color:"var(--text3)"}}>
+              {hiddenNotes?"👁 Näytä muistiinpanot":"🙈 Piilota muistiinpanot"}
+            </div>
+          </>)}
+
+          {/* --- DM --- */}
+          {sidebarCtxMenu.type==="dm"&&(<>
+            <div onClick={()=>togglePin(sidebarCtxMenu.item.id)} style={ctxItem}>
+              {pinnedItems[sidebarCtxMenu.item.id]?"📌 Poista kiinnitys":"📌 Kiinnitä"}
+            </div>
+            <div style={{height:"1px",background:"var(--border)",margin:"4px 0"}}/>
+            <div style={{padding:"4px 10px 2px",fontSize:10,color:"var(--text3)"}}>Mykistä</div>
+            {[15,60,480,1440].map(m=>(
+              <div key={m} onClick={()=>{setMutedChannels(prev=>({...prev,[sidebarCtxMenu.dmId]:Date.now()+m*60000}));pushNotif("info",`Mykistetty ${m<60?m+" min":m<1440?m/60+" t":"24 t"}`);setSidebarCtxMenu(null)}} style={ctxItem}>
+                🔕 {m<60?m+" min":m<1440?m/60+" t":"24 t"}
+              </div>
+            ))}
+            {isChannelMuted(sidebarCtxMenu.dmId)&&(
+              <div onClick={()=>{setMutedChannels(prev=>{const n={...prev};delete n[sidebarCtxMenu.dmId];return n});setSidebarCtxMenu(null)}} style={ctxItem}>🔔 Poista mykistys</div>
+            )}
+            <div style={{height:"1px",background:"var(--border)",margin:"4px 0"}}/>
+            <div onClick={()=>{setProfileModal(sidebarCtxMenu.item);setSidebarCtxMenu(null)}} style={ctxItem}>👤 Jäsenen tiedot</div>
+            <div onClick={()=>reportSidebarItem(sidebarCtxMenu.item,"dm_report")} style={{...ctxItem,color:"var(--text2)"}}>🚩 Raportoi käyttäjä</div>
+            <div style={{height:"1px",background:"var(--border)",margin:"4px 0"}}/>
+            <div onClick={()=>hideDmUser(sidebarCtxMenu.item.id)} style={{...ctxItem,color:"var(--text3)"}}>🙈 Piilota keskustelu</div>
+          </>)}
+
+          {/* --- KALUSTO --- */}
+          {sidebarCtxMenu.type==="equipment"&&(<>
+            <div onClick={()=>togglePin(sidebarCtxMenu.item.id)} style={ctxItem}>
+              {pinnedItems[sidebarCtxMenu.item.id]?"📌 Poista kiinnitys":"📌 Kiinnitä"}
+            </div>
+            <div style={{height:"1px",background:"var(--border)",margin:"4px 0"}}/>
+            <div onClick={()=>{openEquipmentChat(sidebarCtxMenu.item);setSidebarCtxMenu(null)}} style={ctxItem}>ℹ️ Varauksen tiedot</div>
+          </>)}
+        </div>
+      )}
+
       {/* Profiili-modal */}
       {profileModal&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200}} onClick={()=>setProfileModal(null)}>
@@ -1931,6 +2143,7 @@ function Modal({ title, onClose, children }) {
 }
 
 const iconBtn   = {background:"transparent",border:"none",color:"var(--text2)",cursor:"pointer",fontSize:16,padding:"4px 6px",borderRadius:6,fontFamily:"system-ui"}
+const sectionAddBtn = {...iconBtn,display:"inline-flex",alignItems:"center",justifyContent:"center",width:22,height:22,padding:0,lineHeight:1,fontSize:18}
 const lbl       = {display:"block",fontSize:12,fontWeight:500,color:"var(--text2)",marginBottom:6,marginTop:10}
 const inp       = {width:"100%",background:"var(--bg)",border:"1px solid var(--border2)",borderRadius:8,padding:"9px 12px",color:"var(--text)",fontSize:14,boxSizing:"border-box",fontFamily:"system-ui",outline:"none"}
 const btnPrimary= {background:"#4f7ef7",border:"none",borderRadius:8,color:"#fff",padding:"8px 18px",cursor:"pointer",fontSize:13,fontWeight:500,fontFamily:"system-ui"}

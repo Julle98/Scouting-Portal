@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react"
 import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom"
 import { useAuth } from "../contexts/AuthContext"
 import { db } from "../services/firebase"
-import { doc, updateDoc, serverTimestamp, collection, onSnapshot, getDoc } from "firebase/firestore"
+import { doc, updateDoc, serverTimestamp, collection, onSnapshot, getDoc, query, orderBy, limit } from "firebase/firestore"
 import ChatPage from "./ChatPage"
 import EquipmentPage from "./EquipmentPage"
 import MembersPage from "./MembersPage"
@@ -77,13 +77,18 @@ export default function MainLayout() {
   const navigate = useNavigate()
   const location = useLocation()
   const [allUsers, setAllUsers] = useState([])
+  const [chatChannels, setChatChannels] = useState([])
+  const [equipmentChats, setEquipmentChats] = useState([])
   const [toasts, setToasts]         = useState([])
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [showTerms, setShowTerms]   = useState(null) // "terms" | "privacy"
   const [inviteEmail, setInviteEmail] = useState("")
   const [chatHasBadge, setChatHasBadge] = useState(localStorage.getItem("chatAlert") === "1")
+  const [chatUnreadCount, setChatUnreadCount] = useState(Number(localStorage.getItem("chatUnreadTotal") || "0") || 0)
   const [hasShownUnreadToast, setHasShownUnreadToast] = useState(false)
   const toastTimersRef = useRef({})
+  const wasHiddenRef = useRef(typeof document !== "undefined" && document.visibilityState === "hidden")
+  const chatMessageSnapshotRef = useRef({})
 
   useEffect(() => {
     if (!user) return
@@ -100,6 +105,25 @@ export default function MainLayout() {
       setAllUsers(snap.docs.map(d => ({ id:d.id, ...d.data() })).filter(u => isAdmin || !u.isDebug))
     )
   }, [isAdmin])
+
+  useEffect(() => {
+    if (!user) return
+    const q = query(collection(db, "channels"), orderBy("name"))
+    return onSnapshot(q, snap => {
+      const all = snap.docs.map(d => ({ id:d.id, ...d.data() }))
+      setChatChannels(all.filter(ch => ch.type === "public" || ch.members?.includes(user.uid)))
+    })
+  }, [user?.uid])
+
+  useEffect(() => {
+    if (!user) return
+    return onSnapshot(collection(db, "directMessages"), snap => {
+      const chats = snap.docs
+        .map(d => ({ id:d.id, ...d.data() }))
+        .filter(chat => chat.isEquipmentChat && (isAdmin || chat.participants?.includes(user.uid)))
+      setEquipmentChats(chats)
+    })
+  }, [user?.uid, isAdmin])
 
   useEffect(() => {
     const pageLabel = location.pathname.startsWith("/chat")
@@ -135,6 +159,139 @@ export default function MainLayout() {
   }, [])
 
   useEffect(() => {
+    if (typeof window === "undefined" || !("Notification" in window)) return
+    if (Notification.permission !== "default") return
+    Notification.requestPermission().catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (!user || !profile) return
+
+    const channelBadges = {}
+    const dmBadges = {}
+    const equipmentBadges = {}
+    const myTag = profile.displayName?.split(" ")[0]?.toLowerCase()
+
+    const publishChatBadgeState = () => {
+      const totalChannelUnread = Object.values(channelBadges).reduce((sum, badge) => sum + (badge?.unread || 0), 0)
+      const totalMentions = Object.values(channelBadges).reduce((sum, badge) => sum + (badge?.mentions || 0), 0)
+      const totalDmUnread = Object.values(dmBadges).reduce((sum, badge) => sum + (badge?.unread || 0), 0)
+      const totalEquipmentUnread = Object.values(equipmentBadges).reduce((sum, badge) => sum + (badge?.unread || 0), 0)
+      const totalUnread = totalChannelUnread + totalDmUnread + totalEquipmentUnread
+      const hasChatAlert = totalMentions > 0 || totalDmUnread > 0 || totalEquipmentUnread > 0
+
+      localStorage.setItem("chatAlert", hasChatAlert ? "1" : "0")
+      localStorage.setItem("chatUnreadTotal", String(totalUnread))
+      setChatHasBadge(hasChatAlert)
+      setChatUnreadCount(totalUnread)
+      window.dispatchEvent(
+        new CustomEvent("chatBadgesChanged", {
+          detail: { hasChatAlert, totalMentions, totalDmUnread, totalEquipmentUnread, totalChannelUnread, totalUnread }
+        })
+      )
+    }
+
+    const maybeNotifyIncoming = (scopeKey, newestMessage, title) => {
+      const createdAtMs = newestMessage?.createdAt?.toMillis?.() || 0
+      const previousMs = chatMessageSnapshotRef.current[scopeKey]
+
+      if (previousMs == null) {
+        chatMessageSnapshotRef.current[scopeKey] = createdAtMs
+        return
+      }
+
+      if (!createdAtMs || createdAtMs <= previousMs) return
+      chatMessageSnapshotRef.current[scopeKey] = createdAtMs
+
+      if (newestMessage.senderId === user.uid || newestMessage.deleted) return
+      if ((newestMessage.readBy || []).includes(user.uid)) return
+      if (location.pathname.startsWith("/chat")) return
+
+      const body = newestMessage.text?.trim()
+        ? newestMessage.text.slice(0, 120)
+        : (newestMessage.gifUrl ? "GIF" : "Liite")
+
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+          const popup = new Notification(title, { body, tag: `chat-${scopeKey}` })
+          popup.onclick = () => {
+            window.focus()
+            popup.close()
+          }
+        }
+        return
+      }
+
+      pushToast(`${title}: ${body}`, "info")
+    }
+
+    const channelUnsubs = chatChannels.map(ch => {
+      const q = query(collection(db, "channels", ch.id, "messages"), orderBy("createdAt", "desc"), limit(200))
+      return onSnapshot(q, snap => {
+        const docs = snap.docs.map(d => ({ id:d.id, ...d.data() }))
+        let unread = 0
+        let mentions = 0
+
+        docs.forEach(m => {
+          if (m.senderId === user.uid || m.deleted) return
+          const isUnread = !(m.readBy || []).includes(user.uid)
+          if (isUnread) unread++
+          const txt = (m.text || "").toLowerCase()
+          if (myTag && isUnread && txt.includes("@" + myTag)) mentions++
+        })
+
+        channelBadges[ch.id] = { unread, mentions }
+        const newestIncoming = docs.find(m => m.senderId !== user.uid && !m.deleted)
+        if (newestIncoming) maybeNotifyIncoming(`channel:${ch.id}`, newestIncoming, `${newestIncoming.senderName} · #${ch.name}`)
+        publishChatBadgeState()
+      })
+    })
+
+    const dmUnsubs = allUsers.filter(other => other.id !== user.uid).map(other => {
+      const dmId = [user.uid, other.id].sort().join("_")
+      const q = query(collection(db, "directMessages", dmId, "messages"), orderBy("createdAt", "desc"), limit(200))
+      return onSnapshot(q, snap => {
+        const docs = snap.docs.map(d => ({ id:d.id, ...d.data() }))
+        let unread = 0
+
+        docs.forEach(m => {
+          if (m.senderId === user.uid || m.deleted) return
+          if (!(m.readBy || []).includes(user.uid)) unread++
+        })
+
+        dmBadges[dmId] = { unread }
+        const newestIncoming = docs.find(m => m.senderId !== user.uid && !m.deleted)
+        if (newestIncoming) maybeNotifyIncoming(`dm:${dmId}`, newestIncoming, newestIncoming.senderName || other.displayName || "Yksityisviesti")
+        publishChatBadgeState()
+      })
+    })
+
+    const equipmentUnsubs = equipmentChats.map(chat => {
+      const q = query(collection(db, "directMessages", chat.id, "messages"), orderBy("createdAt", "desc"), limit(200))
+      return onSnapshot(q, snap => {
+        const docs = snap.docs.map(d => ({ id:d.id, ...d.data() }))
+        let unread = 0
+
+        docs.forEach(m => {
+          if (m.senderId === user.uid || m.deleted) return
+          if (!(m.readBy || []).includes(user.uid)) unread++
+        })
+
+        equipmentBadges[chat.id] = { unread }
+        const newestIncoming = docs.find(m => m.senderId !== user.uid && !m.deleted)
+        if (newestIncoming) maybeNotifyIncoming(`equipment:${chat.id}`, newestIncoming, `${newestIncoming.senderName} · ${chat.itemName || "Kalustovaraus"}`)
+        publishChatBadgeState()
+      })
+    })
+
+    return () => {
+      channelUnsubs.forEach(unsub => unsub())
+      dmUnsubs.forEach(unsub => unsub())
+      equipmentUnsubs.forEach(unsub => unsub())
+    }
+  }, [allUsers, chatChannels, equipmentChats, profile, user, location.pathname])
+
+  useEffect(() => {
     if (user && profile?.displayName) {
       pushToast(`Tervetuloa, ${profile.displayName.split(" ")[0]}! 👋`, "success")
 
@@ -152,6 +309,30 @@ export default function MainLayout() {
   }, [user?.uid])
 
   useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        wasHiddenRef.current = true
+        return
+      }
+
+      if (!wasHiddenRef.current) return
+      wasHiddenRef.current = false
+
+      const firstName = profile?.displayName?.split(" ")[0]
+      if (firstName) pushToast(`Tervetuloa takaisin, ${firstName} 👋`, "success")
+
+      const unread = Number(localStorage.getItem("chatUnreadTotal") || "0") || 0
+      if (unread > 0) {
+        const label = unread === 1 ? "lukematon viesti" : "lukematonta viestiä"
+        pushToast(`Sinulla on ${unread} ${label} 💬`, "info")
+      }
+    }
+
+    document.addEventListener("visibilitychange", onVisibilityChange)
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange)
+  }, [profile?.displayName])
+
+  useEffect(() => {
     const url = new URL(window.location.href)
     if (!url.searchParams.has("_refresh")) return
 
@@ -163,18 +344,13 @@ export default function MainLayout() {
   useEffect(() => {
     const syncBadge = () => {
       setChatHasBadge(localStorage.getItem("chatAlert") === "1")
+      setChatUnreadCount(Number(localStorage.getItem("chatUnreadTotal") || "0") || 0)
     }
 
     const onBadgeChange = (e) => {
-      const unread = Number(e?.detail?.totalUnread || 0)
-      if (user && unread > 0 && !hasShownUnreadToast) {
-        const label = unread === 1 ? "lukematon viesti" : "lukematonta viestiä"
-        pushToast(`Sinulla on ${unread} ${label} 💬`, "info")
-        setHasShownUnreadToast(true)
-      }
-
       if (typeof e?.detail?.hasChatAlert === "boolean") {
         setChatHasBadge(e.detail.hasChatAlert)
+        setChatUnreadCount(Number(e.detail.totalUnread || 0))
       } else {
         syncBadge()
       }
@@ -188,7 +364,7 @@ export default function MainLayout() {
       window.removeEventListener("chatBadgesChanged", onBadgeChange)
       window.removeEventListener("storage", syncBadge)
     }
-  }, [user, hasShownUnreadToast])
+  }, [])
 
   function scheduleToastRemoval(id) {
     const current = toastTimersRef.current[id]
@@ -205,6 +381,21 @@ export default function MainLayout() {
     }, TOAST_VISIBLE_MS + TOAST_FADE_MS)
 
     toastTimersRef.current[id] = { closeTimer, removeTimer }
+  }
+
+  function dismissToast(id) {
+    const current = toastTimersRef.current[id]
+    if (current?.closeTimer) clearTimeout(current.closeTimer)
+    if (current?.removeTimer) clearTimeout(current.removeTimer)
+
+    setToasts(prev => prev.map(t => (t.id === id ? { ...t, closing: true } : t)))
+
+    const removeTimer = setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id))
+      delete toastTimersRef.current[id]
+    }, TOAST_FADE_MS)
+
+    toastTimersRef.current[id] = { closeTimer: null, removeTimer }
   }
 
   function pushToast(msg, type="success") {
@@ -249,7 +440,7 @@ export default function MainLayout() {
   }
 
   async function handleLogout() {
-    pushToast("Kirjauduttu ulos — nähdään pian! 🙌", "info")
+    pushToast("Kirjaudutaan ulos — nähdään pian! 🙌", "info")
     setTimeout(() => logout(), 1200)
   }
 
@@ -302,7 +493,9 @@ export default function MainLayout() {
               <span style={{ fontSize:16 }}>{n.icon}</span>
               <span style={{ flex:1 }}>{n.label}</span>
               {n.path === "/chat" && chatHasBadge && (
-                <span style={{ width:9, height:9, borderRadius:"50%", background:"#ef4444", boxShadow:"0 0 0 2px rgba(239,68,68,0.2)" }} />
+                <span style={{ minWidth:18, height:18, padding:"0 5px", borderRadius:999, background:"#ef4444", color:"#fff", fontSize:10, fontWeight:700, display:"inline-flex", alignItems:"center", justifyContent:"center", boxShadow:"0 0 0 2px rgba(239,68,68,0.2)" }}>
+                  {chatUnreadCount > 99 ? "99+" : chatUnreadCount}
+                </span>
               )}
             </div>
           ))}
@@ -378,7 +571,7 @@ export default function MainLayout() {
         {toasts.map(t => (
           <div key={t.id} style={{
             background:"var(--bg3)", border:"1px solid var(--border2)", borderRadius:10,
-            padding:"10px 20px", fontSize:13, color:"var(--text)", whiteSpace:"nowrap",
+            padding:"10px 12px 10px 20px", fontSize:13, color:"var(--text)", whiteSpace:"nowrap",
             boxShadow:"0 8px 24px rgba(0,0,0,0.5)", pointerEvents:"all",
             borderBottom: t.type==="success"?"3px solid #22c55e":t.type==="error"?"3px solid #ef4444":"3px solid #4f7ef7",
             animation: t.closing ? `toastOut ${TOAST_FADE_MS}ms ease forwards` : "toastIn 0.25s ease",
@@ -390,6 +583,13 @@ export default function MainLayout() {
                 x{t.count}
               </span>
             )}
+            <button
+              onClick={() => dismissToast(t.id)}
+              aria-label="Sulje ilmoitus"
+              style={{background:"transparent",border:"none",color:"var(--text3)",cursor:"pointer",fontSize:14,lineHeight:1,padding:"2px 4px",borderRadius:6,marginLeft:2,fontFamily:"system-ui"}}
+            >
+              ✕
+            </button>
           </div>
         ))}
       </div>
