@@ -1,5 +1,6 @@
 // src/pages/EquipmentPage.jsx
 import { useState, useEffect, useCallback } from "react"
+import { useNavigate } from "react-router-dom"
 import { useAuth } from "../contexts/AuthContext"
 import { db } from "../services/firebase"
 import {
@@ -55,6 +56,7 @@ function statusLabel(res) {
 // ── Pääkomponentti ─────────────────────────────────────────────────────────────
 export default function EquipmentPage() {
   const { user, profile, isAdmin } = useAuth()
+  const navigate = useNavigate()
   const isManager = isAdmin || profile?.role === "kalustovastaava" || profile?.roles?.includes("kalustovastaava")
 
   const [items, setItems]           = useState([])
@@ -136,26 +138,45 @@ export default function EquipmentPage() {
     setTimeout(() => setNotification(null), 3500)
   }
 
-  // ── DM-avaus kalustovastaavalle ────────────────────────────────────────────
-  async function openDMWithManager(itemId, itemName, purpose, reservationId) {
-    // Etsi kalustovastaava tai admin
+  // ── Kalustokeskustelun luonti ──────────────────────────────────────────────
+  async function createEquipmentChat(itemId, itemName, itemEmoji, purpose, reservationId, quantity, startDate, endDate) {
     try {
       const { getDocs } = await import("firebase/firestore")
       const usersSnap = await getDocs(collection(db, "users"))
       const users = usersSnap.docs.map(d => ({ id:d.id, ...d.data() }))
-      const manager = users.find(u =>
-        u.id !== user.uid && (u.isAdmin || u.role === "kalustovastaava" || u.roles?.includes("kalustovastaava"))
+      const hasRole = (u, roleName) => u.role === roleName || u.roles?.includes(roleName)
+      const managers = users.filter(u =>
+        u.id !== user.uid && (
+          hasRole(u, "kalustovastaava") ||
+          hasRole(u, "admin") ||
+          hasRole(u, "lippukunnanjohtaja")
+        )
       )
-      if (!manager) return
+      const chatId = `equipment_${reservationId}`
+      const participantIds = Array.from(new Set([user.uid, ...managers.map(manager => manager.id)]))
 
-      const dmId = [user.uid, manager.id].sort().join("_")
-      const dmRef = doc(db, "directMessages", dmId)
-      const dmSnap = await getDoc(dmRef)
-      if (!dmSnap.exists()) {
-        await setDoc(dmRef, { participants: [user.uid, manager.id], createdAt: serverTimestamp() })
-      }
-      await addDoc(collection(db, "directMessages", dmId, "messages"), {
-        text: `📬 Varauspyyntö: **${itemName}**\nKäyttötarkoitus: ${purpose || "–"}\nPäivät: ${reqForm.startDate} – ${reqForm.endDate}\nMäärä: ${reqForm.quantity}`,
+      await setDoc(doc(db, "directMessages", chatId), {
+        participants: participantIds,
+        managerIds: managers.map(manager => manager.id),
+        requesterId: user.uid,
+        requesterName: profile?.displayName,
+        reservationId,
+        itemId,
+        itemName,
+        itemEmoji: itemEmoji || "🎒",
+        purpose: purpose || "",
+        quantity,
+        startDate,
+        endDate,
+        isEquipmentChat: true,
+        status: "open",
+        createdAt: serverTimestamp(),
+        lastMessage: `Uusi varauspyyntö: ${itemName}`,
+        lastMessageAt: serverTimestamp(),
+      })
+
+      await addDoc(collection(db, "directMessages", chatId, "messages"), {
+        text: `📬 Varauspyyntö: ${itemName}\nKäyttötarkoitus: ${purpose || "–"}\nPäivät: ${startDate} – ${endDate}\nMäärä: ${quantity}`,
         itemId,
         itemName,
         reservationId,
@@ -163,12 +184,17 @@ export default function EquipmentPage() {
         requesterName: profile?.displayName,
         senderId: user.uid,
         senderName: profile?.displayName,
+        senderPhoto: profile?.photoURL || null,
         createdAt: serverTimestamp(),
         readBy: [user.uid],
         type: "equipment_request",
+        reactions: {},
+        deleted: false,
       })
+      return chatId
     } catch (e) {
       console.error("DM-virhe:", e)
+      return null
     }
   }
 
@@ -207,12 +233,21 @@ export default function EquipmentPage() {
     })
     await updateDoc(doc(db, "equipment", selected.id), { available: selected.available - qty })
 
-    // Avaa DM kalustovastaavalle
-    await openDMWithManager(selected.id, selected.name, reqForm.purpose, resRef.id)
+    const chatId = await createEquipmentChat(
+      selected.id,
+      selected.name,
+      selected.emoji,
+      reqForm.purpose,
+      resRef.id,
+      qty,
+      reqForm.startDate,
+      reqForm.endDate,
+    )
 
     setShowRequest(false)
     setReqForm({ quantity:1, startDate:"", endDate:"", purpose:"" })
-    showNotif("Varauspyyntö lähetetty! 📬 Keskustelu kalustovastaavan kanssa avattu.")
+    showNotif("Varauspyyntö lähetetty! Kalustokeskustelu avattu.")
+    if (chatId) navigate(`/chat/equipment/${chatId}`)
   }
 
   // ── Hallintapaneelin toiminnot ───────────────────────────────────────────────
@@ -424,34 +459,6 @@ export default function EquipmentPage() {
                           📅 {res.startDate} – {res.endDate} · ×{res.quantity}
                         </div>
                       </div>
-                      {isManager && (
-                        <div style={{ display:"flex", flexDirection:"column", gap:6, flexShrink:0 }}>
-                          {res.status === "pending" && (
-                            <>
-                              <button onClick={() => approveReservation(res)}
-                                style={{ background:"rgba(34,197,94,0.15)", border:"1px solid rgba(34,197,94,0.3)", borderRadius:6, color:"#22c55e", padding:"4px 10px", cursor:"pointer", fontSize:11 }}>
-                                ✓ Hyväksy
-                              </button>
-                              <button onClick={() => denyReservation(res)}
-                                style={{ background:"transparent", border:"1px solid var(--border2)", borderRadius:6, color:"var(--text3)", padding:"4px 10px", cursor:"pointer", fontSize:11 }}>
-                                ✗ Hylkää
-                              </button>
-                            </>
-                          )}
-                          {res.status === "approved" && (
-                            <>
-                              <button onClick={() => markReturned(res)}
-                                style={{ background:"rgba(79,126,247,0.15)", border:"1px solid rgba(79,126,247,0.3)", borderRadius:6, color:"#4f7ef7", padding:"4px 10px", cursor:"pointer", fontSize:11 }}>
-                                📥 Palautettu
-                              </button>
-                              <button onClick={() => denyReservation(res)}
-                                style={{ background:"transparent", border:"1px solid var(--border2)", borderRadius:6, color:"var(--text3)", padding:"4px 10px", cursor:"pointer", fontSize:11 }}>
-                                ✗ Peru
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      )}
                     </div>
                   )
                 })}
@@ -472,10 +479,6 @@ export default function EquipmentPage() {
                         — {res.requesterName} · piti palauttaa {res.endDate}
                       </span>
                     </div>
-                    <button onClick={() => markReturned(res)}
-                      style={{ background:"rgba(79,126,247,0.15)", border:"1px solid rgba(79,126,247,0.3)", borderRadius:6, color:"#4f7ef7", padding:"4px 10px", cursor:"pointer", fontSize:11 }}>
-                      📥 Palautettu
-                    </button>
                   </div>
                 ))}
               </div>
@@ -624,31 +627,6 @@ export default function EquipmentPage() {
                     </div>
                   </div>
 
-                  {/* Toimintopainikkeet */}
-                  {adminTab === "pending" && (
-                    <div style={{ display:"flex", gap:8, marginTop:12 }}>
-                      <button onClick={() => approveReservation(r)}
-                        style={{ background:"rgba(34,197,94,0.15)", border:"1px solid rgba(34,197,94,0.3)", borderRadius:6, color:"#22c55e", padding:"5px 14px", cursor:"pointer", fontSize:12 }}>
-                        ✓ Hyväksy
-                      </button>
-                      <button onClick={() => denyReservation(r)}
-                        style={{ background:"transparent", border:"1px solid var(--border2)", borderRadius:6, color:"var(--text3)", padding:"5px 14px", cursor:"pointer", fontSize:12 }}>
-                        ✗ Hylkää
-                      </button>
-                    </div>
-                  )}
-                  {adminTab === "active" && (
-                    <div style={{ display:"flex", gap:8, marginTop:12 }}>
-                      <button onClick={() => markReturned(r)}
-                        style={{ background:"rgba(79,126,247,0.15)", border:"1px solid rgba(79,126,247,0.3)", borderRadius:6, color:"#4f7ef7", padding:"5px 14px", cursor:"pointer", fontSize:12 }}>
-                        📥 Merkitse palautetuksi
-                      </button>
-                      <button onClick={() => denyReservation(r)}
-                        style={{ background:"transparent", border:"1px solid var(--border2)", borderRadius:6, color:"var(--text3)", padding:"5px 14px", cursor:"pointer", fontSize:12 }}>
-                        ✗ Peru varaus
-                      </button>
-                    </div>
-                  )}
                 </div>
               )
             })}

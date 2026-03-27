@@ -25,15 +25,14 @@ export default function MembersPage() {
   const [reportSent, setReportSent] = useState(false)
   // Roolin anto
   const [roleTarget, setRoleTarget]   = useState(null)  // { member }
-  const [pendingRole, setPendingRole] = useState("")
-  const [roleConfirm, setRoleConfirm] = useState(false)
+  const [pendingRoles, setPendingRoles] = useState([])
   const navigate = useNavigate()
 
   useEffect(() => {
     return onSnapshot(collection(db, "users"), snap =>
-      setMembers(snap.docs.map(d => ({ id:d.id, ...d.data() })).filter(u => !u.isInvisible))
+      setMembers(snap.docs.map(d => ({ id:d.id, ...d.data() })).filter(u => isAdmin || !u.isInvisible))
     )
-  }, [])
+  }, [isAdmin])
 
   useEffect(() => {
     return onSnapshot(doc(db, "config", "roles"), snap => {
@@ -60,10 +59,44 @@ export default function MembersPage() {
     navigate("/")
   }
 
-  async function confirmRoleChange() {
-    if (!roleTarget || !pendingRole) return
-    await updateDoc(doc(db, "users", roleTarget.id), { role: pendingRole, updatedAt: serverTimestamp() })
-    setRoleTarget(null); setPendingRole(""); setRoleConfirm(false)
+  function getUserRoles(m) {
+    const list = Array.isArray(m?.roles) ? m.roles : []
+    const merged = Array.from(new Set([...list, m?.role].filter(Boolean)))
+    return merged.length ? merged : ["johtaja"]
+  }
+
+  function getRoleRank(roleName) {
+    const idx = roles.indexOf(roleName)
+    return idx === -1 ? Number.MAX_SAFE_INTEGER : idx
+  }
+
+  function getPrimaryRoleFromList(roleList, preferred = null) {
+    if (preferred && roleList.includes(preferred)) return preferred
+    return [...roleList].sort((a, b) => getRoleRank(a) - getRoleRank(b))[0] || "johtaja"
+  }
+
+  function togglePendingRole(roleName) {
+    setPendingRoles(prev => {
+      if (prev.includes(roleName)) {
+        const next = prev.filter(r => r !== roleName)
+        return next.length ? next : ["johtaja"]
+      }
+      return [...prev, roleName]
+    })
+  }
+
+  async function saveRolesForTarget() {
+    if (!roleTarget) return
+    const normalized = Array.from(new Set(pendingRoles.filter(r => roles.includes(r))))
+    const finalRoles = normalized.length ? normalized : ["johtaja"]
+    const primaryRole = getPrimaryRoleFromList(finalRoles, roleTarget.role)
+    await updateDoc(doc(db, "users", roleTarget.id), {
+      role: primaryRole,
+      roles: finalRoles,
+      updatedAt: serverTimestamp(),
+    })
+    setRoleTarget(null)
+    setPendingRoles([])
   }
 
   async function sendReport() {
@@ -127,14 +160,15 @@ export default function MembersPage() {
                       {m.id===user.uid && <span style={{ fontSize:10, color:"var(--text3)", marginLeft:5 }}>(sinä)</span>}
                     </div>
                     <div style={{ display:"flex", alignItems:"center", gap:5, marginBottom:3 }}>
-                      <span style={{ fontSize:11, fontWeight:500, color: ROLE_COLORS[m.role]||"var(--text2)" }}>{m.role}</span>
-                      {/* Roolin vaihtopainike — kaikille näkyvä */}
-                      <button
-                        onClick={e => { e.stopPropagation(); setRoleTarget(m); setPendingRole(m.role||"johtaja") }}
-                        title="Vaihda rooli"
-                        style={{ background:"rgba(255,255,255,0.06)", border:"1px solid var(--border2)", borderRadius:4, color:"var(--text3)", cursor:"pointer", fontSize:11, padding:"0px 5px", lineHeight:"16px", fontFamily:"system-ui" }}>
-                        ＋
-                      </button>
+                      <span style={{ fontSize:11, fontWeight:500, color: ROLE_COLORS[m.role]||"var(--text2)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{getUserRoles(m).join(", ")}</span>
+                      {isAdmin && (
+                        <button
+                          onClick={e => { e.stopPropagation(); setRoleTarget(m); setPendingRoles(getUserRoles(m)) }}
+                          title="Muokkaa rooleja"
+                          style={{ background:"rgba(255,255,255,0.06)", border:"1px solid var(--border2)", borderRadius:4, color:"var(--text3)", cursor:"pointer", fontSize:11, padding:"0px 5px", lineHeight:"16px", fontFamily:"system-ui" }}>
+                          ＋
+                        </button>
+                      )}
                     </div>
                     {m.title && <div style={{ fontSize:11, color:"var(--text3)", marginBottom:2 }}>{m.title}</div>}
                     <div style={{ fontSize:11, color:"var(--text3)" }}>{statusLabel(m)}</div>
@@ -209,56 +243,34 @@ export default function MembersPage() {
       )}
 
       {/* Roolin anto -modal */}
-      {roleTarget && !roleConfirm && (
+      {roleTarget && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:120 }}
           onClick={() => setRoleTarget(null)}>
           <div style={{ background:"var(--bg2)", border:"1px solid var(--border2)", borderRadius:16, padding:24, width:360, maxWidth:"90vw" }}
             onClick={e => e.stopPropagation()}>
-            <h3 style={{ margin:"0 0 6px", fontSize:16 }}>Vaihda rooli</h3>
+            <h3 style={{ margin:"0 0 6px", fontSize:16 }}>Muokkaa rooleja</h3>
             <p style={{ fontSize:13, color:"var(--text2)", margin:"0 0 16px" }}>
               Henkilö: <strong style={{ color:"var(--text)" }}>{roleTarget.displayName}</strong>
             </p>
             <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:20 }}>
               {roles.map(r => (
-                <button key={r} onClick={() => setPendingRole(r)}
+                <button key={r} onClick={() => togglePendingRole(r)}
                   style={{ padding:"10px 14px", borderRadius:8, cursor:"pointer", fontFamily:"system-ui", fontSize:13, textAlign:"left",
-                    border: pendingRole===r ? `1px solid ${ROLE_COLORS[r]||"#4f7ef7"}` : "1px solid var(--border)",
-                    background: pendingRole===r ? `${ROLE_COLORS[r]||"#4f7ef7"}18` : "var(--bg3)",
-                    color: pendingRole===r ? (ROLE_COLORS[r]||"#4f7ef7") : "var(--text2)",
+                    border: pendingRoles.includes(r) ? `1px solid ${ROLE_COLORS[r]||"#4f7ef7"}` : "1px solid var(--border)",
+                    background: pendingRoles.includes(r) ? `${ROLE_COLORS[r]||"#4f7ef7"}18` : "var(--bg3)",
+                    color: pendingRoles.includes(r) ? (ROLE_COLORS[r]||"#4f7ef7") : "var(--text2)",
                     display:"flex", alignItems:"center", justifyContent:"space-between" }}>
                   {r}
-                  {pendingRole===r && <span style={{ fontSize:14 }}>✓</span>}
+                  {pendingRoles.includes(r) && <span style={{ fontSize:14 }}>✓</span>}
                 </button>
               ))}
             </div>
             <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
               <button onClick={() => setRoleTarget(null)} style={btnGhost}>Peruuta</button>
-              <button onClick={() => setRoleConfirm(true)} disabled={!pendingRole || pendingRole===roleTarget.role}
-                style={{ ...btnPrimary, opacity: (!pendingRole||pendingRole===roleTarget.role) ? 0.5 : 1 }}>
-                Jatka →
+              <button onClick={saveRolesForTarget} disabled={pendingRoles.length===0}
+                style={{ ...btnPrimary, opacity: pendingRoles.length===0 ? 0.5 : 1 }}>
+                ✓ Tallenna
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Vahvistus-modal */}
-      {roleTarget && roleConfirm && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:130 }}
-          onClick={() => setRoleConfirm(false)}>
-          <div style={{ background:"var(--bg2)", border:"1px solid var(--border2)", borderRadius:16, padding:24, width:360, maxWidth:"90vw", textAlign:"center" }}
-            onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize:36, marginBottom:12 }}>🔄</div>
-            <h3 style={{ margin:"0 0 12px", fontSize:16 }}>Vahvista roolimuutos</h3>
-            <p style={{ fontSize:13, color:"var(--text2)", lineHeight:1.6, margin:"0 0 20px" }}>
-              Vaihdetaan <strong style={{ color:"var(--text)" }}>{roleTarget.displayName}</strong> rooliksi:<br/>
-              <span style={{ color:"var(--text3)", textDecoration:"line-through" }}>{roleTarget.role}</span>
-              {" → "}
-              <strong style={{ color: ROLE_COLORS[pendingRole]||"#4f7ef7" }}>{pendingRole}</strong>
-            </p>
-            <div style={{ display:"flex", gap:8, justifyContent:"center" }}>
-              <button onClick={() => setRoleConfirm(false)} style={btnGhost}>Peruuta</button>
-              <button onClick={confirmRoleChange} style={btnPrimary}>✓ Vahvista</button>
             </div>
           </div>
         </div>

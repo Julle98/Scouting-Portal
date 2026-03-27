@@ -54,6 +54,10 @@ export function AuthProvider({ children }) {
           [`sessions.${sessionId}`]: sessionMeta,
         }
 
+        if (!Array.isArray(existingData?.roles) || existingData.roles.length === 0) {
+          updates.roles = [existingData?.role || "johtaja"]
+        }
+
         if (existingData?.isDebug) {
           updates.lastUsed = serverTimestamp()
           updates.displayName = existingData.displayName || "Debug User"
@@ -80,6 +84,7 @@ export function AuthProvider({ children }) {
           email: firebaseUser.email,
           photoURL: firebaseUser.photoURL,
           role: "johtaja",        
+          roles: ["johtaja"],
           online: true,
           joinedAt: serverTimestamp(),
           lastSeen: serverTimestamp(),
@@ -109,7 +114,8 @@ export function AuthProvider({ children }) {
             displayName: isDebug ? "Debug User" : firebaseUser.displayName,
             email: firebaseUser.email,
             photoURL: isDebug ? null : firebaseUser.photoURL,
-            role: inv.data().role || "johtaja",
+          role: inv.data().role || "johtaja",
+          roles: [inv.data().role || "johtaja"],
             online: true,
             joinedAt: serverTimestamp(),
             lastSeen: serverTimestamp(),
@@ -168,7 +174,10 @@ export function AuthProvider({ children }) {
     await signOut(auth)
   }
 
-  const isAdmin = profile?.role === "admin" || profile?.role === "lippukunnanjohtaja"
+  const profileRoles = Array.isArray(profile?.roles) && profile.roles.length > 0
+    ? profile.roles
+    : [profile?.role].filter(Boolean)
+  const isAdmin = profileRoles.includes("admin") || profileRoles.includes("lippukunnanjohtaja")
 
   return (
     <AuthContext.Provider value={{ user, profile, loading, error, loginWithGoogle, logout, isAdmin }}>

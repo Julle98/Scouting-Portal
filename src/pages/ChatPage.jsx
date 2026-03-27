@@ -42,6 +42,8 @@ export default function ChatPage() {
   const [messages, setMessages]       = useState([])
   const [channelBadges, setChannelBadges] = useState({})
   const [dmBadges, setDmBadges] = useState({})
+  const [equipmentChats, setEquipmentChats] = useState([])
+  const [equipmentBadges, setEquipmentBadges] = useState({})
   const [text, setText]               = useState("")
   const [replyTo, setReplyTo]         = useState(null)
   const [editingMsg, setEditingMsg]   = useState(null)
@@ -58,6 +60,7 @@ export default function ChatPage() {
   const [gifOffset, setGifOffset]     = useState(0)
   const [showNewChannel, setShowNewChannel] = useState(false)
   const [showNewDM, setShowNewDM]     = useState(false)
+  const [showEquipmentChatPicker, setShowEquipmentChatPicker] = useState(false)
   const [showInvite, setShowInvite]   = useState(false)
   const [showChannelSettings, setShowChannelSettings] = useState(false)
   const [showChannelInfo, setShowChannelInfo] = useState(false)
@@ -119,9 +122,31 @@ export default function ChatPage() {
   // Käyttäjät
   useEffect(() => {
     return onSnapshot(collection(db, "users"), snap =>
-      setAllUsers(snap.docs.map(d => ({ id:d.id, ...d.data() })).filter(u => !u.isInvisible))
+      setAllUsers(snap.docs.map(d => ({ id:d.id, ...d.data() })).filter(u => isAdmin || !u.isInvisible))
     )
-  }, [])
+  }, [isAdmin])
+
+  useEffect(() => {
+    return onSnapshot(collection(db, "directMessages"), snap => {
+      const chats = snap.docs
+        .map(d => ({ id:d.id, ...d.data() }))
+        .filter(chat => chat.isEquipmentChat && (isAdmin || chat.participants?.includes(user.uid)))
+        .sort((a, b) => {
+          const closedDiff = Number(Boolean(a.closedAt)) - Number(Boolean(b.closedAt))
+          if (closedDiff !== 0) return closedDiff
+          const aTime = a.lastMessageAt?.toMillis?.() || a.createdAt?.toMillis?.() || 0
+          const bTime = b.lastMessageAt?.toMillis?.() || b.createdAt?.toMillis?.() || 0
+          return bTime - aTime
+        })
+      setEquipmentChats(chats)
+      setActiveDm(prev => {
+        if (!prev?.isEquipmentChat) return prev
+        return chats.find(chat => chat.id === prev.id)
+          ? { ...prev, ...chats.find(chat => chat.id === prev.id), isEquipmentChat: true }
+          : null
+      })
+    })
+  }, [user.uid, isAdmin])
 
   // Kanava- ja DM-ilmaisinlukemat / @maininnat
   useEffect(() => {
@@ -159,26 +184,41 @@ export default function ChatPage() {
       })
     })
 
+    const equipmentUnsubs = equipmentChats.map(chat => {
+      const q = query(collection(db, "directMessages", chat.id, "messages"), orderBy("createdAt", "desc"), limit(200))
+      return onSnapshot(q, snap => {
+        let unread = 0
+        snap.docs.forEach(d => {
+          const m = d.data()
+          if (m.senderId === user.uid || m.deleted) return
+          if (!(m.readBy||[]).includes(user.uid)) unread++
+        })
+        setEquipmentBadges(prev => ({ ...prev, [chat.id]: { unread } }))
+      })
+    })
+
     return () => {
       channelUnsubs.forEach(unsub => unsub())
       dmUnsubs.forEach(unsub => unsub())
+      equipmentUnsubs.forEach(unsub => unsub())
     }
-  }, [channels, allUsers, user.uid, profile])
+  }, [channels, allUsers, user.uid, profile, equipmentChats])
 
   useEffect(() => {
     const totalChannelUnread = Object.values(channelBadges).reduce((sum, b) => sum + (b?.unread || 0), 0)
     const totalMentions = Object.values(channelBadges).reduce((sum, b) => sum + (b?.mentions || 0), 0)
     const totalDmUnread = Object.values(dmBadges).reduce((sum, b) => sum + (b?.unread || 0), 0)
-    const totalUnread = totalChannelUnread + totalDmUnread
-    const hasChatAlert = totalMentions > 0 || totalDmUnread > 0
+    const totalEquipmentUnread = Object.values(equipmentBadges).reduce((sum, b) => sum + (b?.unread || 0), 0)
+    const totalUnread = totalChannelUnread + totalDmUnread + totalEquipmentUnread
+    const hasChatAlert = totalMentions > 0 || totalDmUnread > 0 || totalEquipmentUnread > 0
     localStorage.setItem("chatAlert", hasChatAlert ? "1" : "0")
     localStorage.setItem("chatUnreadTotal", String(totalUnread))
     window.dispatchEvent(
       new CustomEvent("chatBadgesChanged", {
-        detail: { hasChatAlert, totalMentions, totalDmUnread, totalChannelUnread, totalUnread }
+        detail: { hasChatAlert, totalMentions, totalDmUnread, totalEquipmentUnread, totalChannelUnread, totalUnread }
       })
     )
-  }, [channelBadges, dmBadges])
+  }, [channelBadges, dmBadges, equipmentBadges])
 
   // Auto-luo muistiinpano-DM
   useEffect(() => {
@@ -439,6 +479,7 @@ export default function ChatPage() {
     const t = text.trim()
     if (!t && !gifUrl && pendingFiles.length===0) return
     if (!activeChannel && !activeDm) return
+    if (activeDm?.isEquipmentChat && activeDm?.closedAt) return
 
     // Viestiraja
     if (t.length > MAX_MSG_LENGTH) return
@@ -557,6 +598,15 @@ export default function ChatPage() {
     if (location.pathname !== nextPath) navigate(nextPath)
   }
 
+  function openEquipmentChat(chat, updateRoute = true) {
+    setActiveDm({ ...chat, isEquipmentChat: true })
+    setActiveChannel(null)
+    setDmSettings(false)
+    if (!updateRoute) return
+    const nextPath = `/chat/equipment/${chat.id}`
+    if (location.pathname !== nextPath) navigate(nextPath)
+  }
+
   function selectChannel(ch, updateRoute = true) {
     setActiveChannel(ch)
     setActiveDm(null)
@@ -590,7 +640,13 @@ export default function ChatPage() {
       if (dmUser && activeDm?.otherUser?.id !== dmUser.id) openDM(dmUser)
       return
     }
-  }, [chatType, chatTarget, channels, allUsers, user.uid])
+
+    if (chatType === "equipment") {
+      if (!chatTarget || equipmentChats.length === 0) return
+      const equipmentChat = equipmentChats.find(chat => chat.id === chatTarget || chat.reservationId === chatTarget)
+      if (equipmentChat && activeDm?.id !== equipmentChat.id) openEquipmentChat(equipmentChat, false)
+    }
+  }, [chatType, chatTarget, channels, allUsers, equipmentChats, user.uid])
 
   async function resolveReport(id,action) { await updateDoc(doc(db,"moderation",id),{status:action,resolvedAt:serverTimestamp()}) }
   async function addMemberToChannel(uid) { if (!activeChannel || !isChannelAdmin) return; await updateDoc(doc(db,"channels",activeChannel.id),{members:arrayUnion(uid)}) }
@@ -618,10 +674,14 @@ export default function ChatPage() {
       text: actionLabel,
       senderId: user.uid,
       senderName: profile?.displayName,
+      senderPhoto: profile?.photoURL || null,
       createdAt: serverTimestamp(),
       readBy: [user.uid],
       type: "equipment_action",
+      reactions: {},
+      deleted: false,
     })
+    await updateDoc(doc(db,"directMessages",activeDm.id),{lastMessage:actionLabel,lastMessageAt:serverTimestamp()})
   }
 
   async function handleApproveRequest() {
@@ -640,6 +700,83 @@ export default function ChatPage() {
     if (!equipmentRequestDetails) return
     await markReturned(equipmentRequestDetails.itemId, equipmentRequestDetails.id, equipmentRequestDetails.quantity)
     await sendEquipmentStatusUpdate(`📥 Palautettu: ${equipmentRequestDetails.itemName}`)
+  }
+
+  async function closeEquipmentChat() {
+    if (!activeDm?.isEquipmentChat || activeDm.closedAt) return
+    const closeText = `🔒 Keskustelu suljettu (${profile?.displayName || "Johtaja"})`
+    await addDoc(collection(db,"directMessages",activeDm.id,"messages"), {
+      text: closeText,
+      senderId: user.uid,
+      senderName: profile?.displayName,
+      senderPhoto: profile?.photoURL || null,
+      createdAt: serverTimestamp(),
+      readBy: [user.uid],
+      type: "equipment_closed",
+      reactions: {},
+      deleted: false,
+    })
+    await updateDoc(doc(db,"directMessages",activeDm.id), {
+      status: "closed",
+      closedAt: serverTimestamp(),
+      closedBy: user.uid,
+      closedByName: profile?.displayName,
+      lastMessage: closeText,
+      lastMessageAt: serverTimestamp(),
+    })
+  }
+
+  async function reopenEquipmentChat() {
+    if (!activeDm?.isEquipmentChat || !activeDm.closedAt || !isEquipmentManager) return
+    const reopenText = `🔓 Keskustelu avattu uudelleen (${profile?.displayName || "Johtaja"})`
+    await addDoc(collection(db,"directMessages",activeDm.id,"messages"), {
+      text: reopenText,
+      senderId: user.uid,
+      senderName: profile?.displayName,
+      senderPhoto: profile?.photoURL || null,
+      createdAt: serverTimestamp(),
+      readBy: [user.uid],
+      type: "equipment_reopened",
+      reactions: {},
+      deleted: false,
+    })
+    await updateDoc(doc(db,"directMessages",activeDm.id), {
+      status: "open",
+      closedAt: null,
+      closedBy: null,
+      closedByName: null,
+      lastMessage: reopenText,
+      lastMessageAt: serverTimestamp(),
+    })
+  }
+
+  async function requestCancellation() {
+    if (!activeDm?.isEquipmentChat || !equipmentRequestDetails) return
+    if (equipmentRequestDetails.status !== "pending" && equipmentRequestDetails.status !== "approved") return
+    if (equipmentRequestDetails.cancellationRequestedAt) return
+
+    await updateDoc(doc(db, "equipment", equipmentRequestDetails.itemId, "reservations", equipmentRequestDetails.id), {
+      cancellationRequestedAt: serverTimestamp(),
+      cancellationRequestedBy: user.uid,
+      cancellationRequestedByName: profile?.displayName,
+    })
+
+    const requestText = `🟠 Peruutuspyyntö: ${equipmentRequestDetails.itemName} (${profile?.displayName || "Pyytäjä"})`
+    await addDoc(collection(db, "directMessages", activeDm.id, "messages"), {
+      text: requestText,
+      senderId: user.uid,
+      senderName: profile?.displayName,
+      senderPhoto: profile?.photoURL || null,
+      createdAt: serverTimestamp(),
+      readBy: [user.uid],
+      type: "equipment_cancel_request",
+      reactions: {},
+      deleted: false,
+    })
+    await updateDoc(doc(db, "directMessages", activeDm.id), {
+      lastMessage: requestText,
+      lastMessageAt: serverTimestamp(),
+    })
   }
 
   function muteChannel(channelId,minutes) {
@@ -675,7 +812,7 @@ export default function ChatPage() {
   const creatorUser = activeChannel ? allUsers.find(u=>u.id===activeChannel.createdBy) : null
   const charsLeft = MAX_MSG_LENGTH - text.length
   const slowMode = activeChannel?.slowMode||0
-  const canSend = text.trim().length>0||pendingGif||pendingFiles.length>0
+  const canSend = !activeDm?.closedAt && (text.trim().length>0||pendingGif||pendingFiles.length>0)
   const sortedChannels = [...channels].sort((a, b) => {
     if (chatOrder === "unread") {
       const aScore = (channelBadges[a.id]?.mentions || 0) * 10 + (channelBadges[a.id]?.unread || 0)
@@ -698,17 +835,15 @@ export default function ChatPage() {
         ? `${typingNames[0]} ja ${typingNames[1]} kirjoittavat...`
         : `${typingNames[0]} ja ${typingNames.length-1} muuta kirjoittavat...`
 
-  const latestEquipmentRequest = [...messages].reverse().find(m => m.type === "equipment_request" && m.itemId && m.reservationId)
-
   useEffect(() => {
-    if (!latestEquipmentRequest) {
+    if (!activeDm?.isEquipmentChat || !activeDm.itemId || !activeDm.reservationId) {
       setEquipmentRequestDetails(null)
       return
     }
-    const resDoc = doc(db, "equipment", latestEquipmentRequest.itemId, "reservations", latestEquipmentRequest.reservationId)
+    const resDoc = doc(db, "equipment", activeDm.itemId, "reservations", activeDm.reservationId)
     const unsub = onSnapshot(resDoc, snap => {
       if (snap.exists()) {
-        setEquipmentRequestDetails({ id: snap.id, ...snap.data(), itemId: latestEquipmentRequest.itemId, itemName: latestEquipmentRequest.itemName, requesterId: latestEquipmentRequest.requesterId })
+        setEquipmentRequestDetails({ id: snap.id, ...snap.data(), itemId: activeDm.itemId, itemName: activeDm.itemName, requesterId: activeDm.requesterId })
       } else {
         setEquipmentRequestDetails(null)
       }
@@ -716,8 +851,22 @@ export default function ChatPage() {
       setEquipmentRequestDetails(null)
     })
     return () => unsub()
-  }, [latestEquipmentRequest?.itemId, latestEquipmentRequest?.reservationId])
+  }, [activeDm?.id, activeDm?.isEquipmentChat, activeDm?.itemId, activeDm?.reservationId, activeDm?.itemName, activeDm?.requesterId])
   const isOverLimit = text.length > MAX_MSG_LENGTH
+  const isClosedEquipmentChat = Boolean(activeDm?.isEquipmentChat && activeDm?.closedAt)
+  const openEquipmentChats = equipmentChats.filter(chat => !chat.closedAt)
+  const archivedEquipmentChats = equipmentChats.filter(chat => chat.closedAt)
+  const hasCancellationRequest = Boolean(equipmentRequestDetails?.cancellationRequestedAt) &&
+    (equipmentRequestDetails?.status === "pending" || equipmentRequestDetails?.status === "approved")
+  const equipmentStatusMeta = activeDm?.closedAt
+    ? { text: "Suljettu", color: "#f59e0b", bg: "rgba(245,158,11,0.12)" }
+    : equipmentRequestDetails?.status === "returned"
+      ? { text: "Palautettu", color: "#22c55e", bg: "rgba(34,197,94,0.12)" }
+      : equipmentRequestDetails?.status === "denied"
+        ? { text: "Peruttu", color: "#ef4444", bg: "rgba(239,68,68,0.12)" }
+        : equipmentRequestDetails?.status === "approved"
+          ? { text: "Hyväksytty", color: "#4f7ef7", bg: "rgba(79,126,247,0.12)" }
+          : { text: "Odottaa hyväksyntää", color: "#f59e0b", bg: "rgba(245,158,11,0.12)" }
 
   return (
     <div style={{display:"flex",flex:1,overflow:"hidden"}} onClick={()=>{setContextMenu(null);setShowEmoji(false);setShowGif(false);setHoverMsg(null);setShowAttach(false)}}>
@@ -780,6 +929,72 @@ export default function ChatPage() {
                 )}
               </div>
             ))}
+
+            <div style={{padding:"12px 10px 6px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+              <span style={{fontSize:10,fontWeight:600,color:"var(--text3)",textTransform:"uppercase",letterSpacing:"0.08em"}}>Kalustovaraukset</span>
+              <button onClick={e=>{e.stopPropagation();setShowEquipmentChatPicker(true)}} style={iconBtn} title="Kalustovaraukset">＋</button>
+            </div>
+
+            {equipmentChats.length === 0 && (
+              <div style={{padding:"6px 12px",fontSize:12,color:"var(--text3)"}}>
+                Ei keskusteluja vielä.
+              </div>
+            )}
+
+            {openEquipmentChats.map(chat => (
+              <div key={chat.id} onClick={()=>openEquipmentChat(chat)}
+                style={{padding:"6px 10px",cursor:"pointer",fontSize:13,borderRadius:6,margin:"1px 4px",display:"flex",alignItems:"center",gap:8,
+                  background:activeDm?.id===chat.id?"rgba(79,126,247,0.15)":"transparent",
+                  color:activeDm?.id===chat.id?"#4f7ef7":"var(--text2)",
+                  opacity: chat.closedAt ? 0.72 : 1}}>
+                <div style={{width:22,height:22,borderRadius:7,background:"rgba(79,126,247,0.12)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:14}}>
+                  {chat.itemEmoji || "🎒"}
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{chat.itemName}</div>
+                  <div style={{fontSize:10,color:"var(--text3)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                    {chat.requesterId === user.uid ? "Oma varaus" : chat.requesterName || "Kalustovaraus"}
+                    {chat.closedAt ? " · Suljettu" : ""}
+                  </div>
+                </div>
+                {equipmentBadges[chat.id]?.unread > 0 && (
+                  <span style={{minWidth:18,height:18,display:"inline-flex",alignItems:"center",justifyContent:"center",borderRadius:"50%",background:"#ef4444",color:"#fff",fontSize:11,fontWeight:700}}>
+                    {equipmentBadges[chat.id].unread}
+                  </span>
+                )}
+              </div>
+            ))}
+
+            {archivedEquipmentChats.length > 0 && (
+              <>
+                <div style={{padding:"12px 10px 6px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <span style={{fontSize:10,fontWeight:600,color:"var(--text3)",textTransform:"uppercase",letterSpacing:"0.08em"}}>Arkistoidut</span>
+                  <span style={{fontSize:10,color:"var(--text3)"}}>{archivedEquipmentChats.length}</span>
+                </div>
+                {archivedEquipmentChats.map(chat => (
+                  <div key={chat.id} onClick={()=>openEquipmentChat(chat)}
+                    style={{padding:"6px 10px",cursor:"pointer",fontSize:13,borderRadius:6,margin:"1px 4px",display:"flex",alignItems:"center",gap:8,
+                      background:activeDm?.id===chat.id?"rgba(245,158,11,0.15)":"transparent",
+                      color:activeDm?.id===chat.id?"#f59e0b":"var(--text2)",
+                      opacity:0.75}}>
+                    <div style={{width:22,height:22,borderRadius:7,background:"rgba(245,158,11,0.12)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:14}}>
+                      {chat.itemEmoji || "🎒"}
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{chat.itemName}</div>
+                      <div style={{fontSize:10,color:"var(--text3)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                        {chat.requesterId === user.uid ? "Oma varaus" : chat.requesterName || "Kalustovaraus"} · Suljettu
+                      </div>
+                    </div>
+                    {equipmentBadges[chat.id]?.unread > 0 && (
+                      <span style={{minWidth:18,height:18,display:"inline-flex",alignItems:"center",justifyContent:"center",borderRadius:"50%",background:"#ef4444",color:"#fff",fontSize:11,fontWeight:700}}>
+                        {equipmentBadges[chat.id].unread}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </>
+            )}
           </div>
           {isAdmin&&(
             <div style={{padding:"8px",borderTop:"1px solid var(--border)"}}>
@@ -819,27 +1034,47 @@ export default function ChatPage() {
               </div>
             ) : (
               <div style={{display:"flex",alignItems:"baseline",gap:10,flex:1,minWidth:0}}>
-                <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  <div style={{position:"relative",flexShrink:0,width:24,height:24}}>
-                    <Avatar src={activeDm.otherUser?.photoURL} name={activeDm.otherUser?.displayName} size={24} />
-                    <div style={{position:"absolute",bottom:0,right:0,width:8,height:8,borderRadius:"50%",border:"1.5px solid var(--bg2)",background:statusColor(activeDm.otherUser)}}></div>
+                {activeDm.isEquipmentChat ? (
+                  <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
+                    <div style={{width:28,height:28,borderRadius:10,background:"rgba(79,126,247,0.12)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,flexShrink:0}}>
+                      {activeDm.itemEmoji || "🎒"}
+                    </div>
+                    <div style={{minWidth:0}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
+                        <span style={{fontWeight:600,fontSize:14,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{activeDm.itemName}</span>
+                        <span style={{fontSize:11,color:equipmentStatusMeta.color,background:equipmentStatusMeta.bg,padding:"2px 8px",borderRadius:999,whiteSpace:"nowrap"}}>{equipmentStatusMeta.text}</span>
+                        {hasCancellationRequest && (
+                          <span style={{fontSize:11,color:"#f59e0b",background:"rgba(245,158,11,0.16)",padding:"2px 8px",borderRadius:999,whiteSpace:"nowrap"}}>Peruutuspyyntö odottaa</span>
+                        )}
+                      </div>
+                      <div style={{fontSize:12,color:"var(--text3)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                        {activeDm.requesterId === user.uid ? "Oma varaus" : `Pyytäjä: ${activeDm.requesterName || "—"}`}
+                      </div>
+                    </div>
                   </div>
-                  <span
-                    style={{fontWeight:600,fontSize:14,cursor:"pointer",textDecoration:"underline"}}
-                    onClick={() => activeDm.otherUser && setProfileModal(activeDm.otherUser)}
-                    title="Avaa profiili"
-                  >
-                    {activeDm.otherUser?.displayName}
-                  </span>
-                  {activeDm.isSelfNote && (
-                    <span style={{fontSize:12,color:"var(--text3)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-                      Tänne voit laittaa säilöön omia muistiinpanoja halutessasi
+                ) : (
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <div style={{position:"relative",flexShrink:0,width:24,height:24}}>
+                      <Avatar src={activeDm.otherUser?.photoURL} name={activeDm.otherUser?.displayName} size={24} />
+                      <div style={{position:"absolute",bottom:0,right:0,width:8,height:8,borderRadius:"50%",border:"1.5px solid var(--bg2)",background:statusColor(activeDm.otherUser)}}></div>
+                    </div>
+                    <span
+                      style={{fontWeight:600,fontSize:14,cursor:"pointer",textDecoration:"underline"}}
+                      onClick={() => activeDm.otherUser && setProfileModal(activeDm.otherUser)}
+                      title="Avaa profiili"
+                    >
+                      {activeDm.otherUser?.displayName}
                     </span>
-                  )}
-                </div>
+                    {activeDm.isSelfNote && (
+                      <span style={{fontSize:12,color:"var(--text3)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                        Tänne voit laittaa säilöön omia muistiinpanoja halutessasi
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             )
-          ) : <span style={{fontSize:14,color:"var(--text3)",flex:1}}>Valitse kanava tai henkilö</span>
+          ) : <span style={{fontSize:14,color:"var(--text3)",flex:1}}>Valitse kanava, henkilö tai kalustovaraus</span>
           }
           {activeChannel&&isChannelMuted(activeChannel.id)&&(
             <button onClick={()=>setMutedChannels(prev=>{const n={...prev};delete n[activeChannel.id];return n})} style={{...iconBtn,color:"#f59e0b",fontSize:12}}>🔕</button>
@@ -847,7 +1082,7 @@ export default function ChatPage() {
           {activeChannel&&(isChannelAdmin || isEquipmentManager)&&(
             <button onClick={e=>{e.stopPropagation();openChannelSettings()}} style={iconBtn} title="Avaa kanavan säädöt">⚙️</button>
           )}
-          {activeDm&&!activeDm.isSelfNote&&(
+          {activeDm&&!activeDm.isSelfNote&&!activeDm.isEquipmentChat&&(
             <button onClick={()=>{setDmSettings(s=>!s);setShowMembers(false)}} style={iconBtn}>⚙️</button>
           )}
           {activeChannel&&(
@@ -871,7 +1106,7 @@ export default function ChatPage() {
         {!activeChannel&&!activeDm&&(
           <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12,color:"var(--text3)"}}>
             <span style={{fontSize:40}}>💬</span>
-            <span style={{fontSize:14}}>Valitse kanava tai henkilö vasemmalta</span>
+            <span style={{fontSize:14}}>Valitse kanava, henkilö tai kalustovaraus vasemmalta</span>
           </div>
         )}
 
@@ -884,6 +1119,7 @@ export default function ChatPage() {
                 const showAvatar=!condensedChat&&rawShowAvatar
                 const isHovered=hoverMsg===msg.id
                 const readCount=msg.readBy?msg.readBy.filter(id=>id!==msg.senderId).length:0
+                const isEquipmentSystemMessage = msg.type === "equipment_request" || msg.type === "equipment_action" || msg.type === "equipment_closed" || msg.type === "equipment_reopened" || msg.type === "equipment_cancel_request"
                 return (
                   <div key={msg.id}
                     onMouseEnter={()=>setHoverMsg(msg.id)} onMouseLeave={()=>setHoverMsg(null)}
@@ -933,7 +1169,12 @@ export default function ChatPage() {
                               </div>
                             </div>
                           : <>
-                              {msg.text&&<p style={{margin:0,fontSize:14,lineHeight:1.55,wordBreak:"break-word",color:"var(--text)"}}><TextWithLinks text={msg.text} onLinkClick={openLink}/></p>}
+                              {msg.text && (isEquipmentSystemMessage
+                                ? <div style={{marginTop:2,background:"rgba(79,126,247,0.1)",border:"1px solid rgba(79,126,247,0.22)",borderLeft:"3px solid #4f7ef7",borderRadius:"0 8px 8px 0",padding:"7px 10px",fontSize:13,lineHeight:1.5,color:"var(--text2)"}}>
+                                    <TextWithLinks text={msg.text} onLinkClick={openLink}/>
+                                  </div>
+                                : <p style={{margin:0,fontSize:14,lineHeight:1.55,wordBreak:"break-word",color:"var(--text)"}}><TextWithLinks text={msg.text} onLinkClick={openLink}/></p>
+                              )}
                               {msg.gifUrl&&<img src={msg.gifUrl} alt="GIF" style={{maxWidth:280,borderRadius:8,marginTop:4,display:"block"}}/>}
                               {msg.attachments?.map((a,idx)=>(
                                 a.type?.startsWith("image/")
@@ -1006,34 +1247,57 @@ export default function ChatPage() {
             <div style={{padding:"12px 20px",borderTop:"1px solid var(--border)",background:"var(--bg2)",position:"relative"}} onClick={e=>e.stopPropagation()}>
 
               {/* Equipment request action pane */}
-              {equipmentRequestDetails && activeDm && (
+              {equipmentRequestDetails && activeDm?.isEquipmentChat && (
                 <div style={{marginBottom:8,padding:"10px 12px",background:"rgba(34,197,94,0.08)",border:"1px solid rgba(34,197,94,0.2)",borderRadius:8,color:"#d1fae5",display:"flex",flexDirection:"column",gap:8}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,fontSize:12,fontWeight:600}}>
-                    <span>🛠️ Varaus: {equipmentRequestDetails.itemName} ×{equipmentRequestDetails.quantity} ({equipmentRequestDetails.status})</span>
+                    <span>🛠️ Varaus: {equipmentRequestDetails.itemName} ×{equipmentRequestDetails.quantity}</span>
                     <span style={{color:"#a7f3d0",fontSize:11}}>{equipmentRequestDetails.requesterId===user.uid?"Pyytäjä":"Vastaava"}</span>
+                  </div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    <span style={{fontSize:11,color:equipmentStatusMeta.color,background:equipmentStatusMeta.bg,padding:"2px 8px",borderRadius:999,whiteSpace:"nowrap"}}>{equipmentStatusMeta.text}</span>
+                    {hasCancellationRequest && (
+                      <span style={{fontSize:11,color:"#f59e0b",background:"rgba(245,158,11,0.16)",padding:"2px 8px",borderRadius:999,whiteSpace:"nowrap"}}>Peruutuspyyntö odottaa</span>
+                    )}
                   </div>
                   <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                     {equipmentRequestDetails.status === "pending" && isEquipmentManager && (
                       <>
                         <button onClick={handleApproveRequest} style={{...btnPrimary,fontSize:11,padding:"4px 10px"}}>✓ Hyväksy</button>
-                        <button onClick={handleDenyRequest} style={{...btnGhost,fontSize:11,padding:"4px 10px"}}>✗ Hylkää</button>
+                        <button onClick={handleDenyRequest} style={{...btnGhost,fontSize:11,padding:"4px 10px"}}>{equipmentRequestDetails.cancellationRequestedAt ? "✗ Hyväksy peruutus" : "✗ Hylkää"}</button>
                       </>
                     )}
                     {equipmentRequestDetails.status === "approved" && isEquipmentManager && (
                       <>
                         <button onClick={handleMarkReturned} style={{...btnPrimary,fontSize:11,padding:"4px 10px"}}>📥 Palautettu</button>
-                        <button onClick={handleDenyRequest} style={{...btnGhost,fontSize:11,padding:"4px 10px"}}>✗ Peru</button>
+                        <button onClick={handleDenyRequest} style={{...btnGhost,fontSize:11,padding:"4px 10px"}}>{equipmentRequestDetails.cancellationRequestedAt ? "✗ Hyväksy peruutus" : "✗ Peru"}</button>
                       </>
                     )}
-                    {equipmentRequestDetails.requesterId === user.uid && equipmentRequestDetails.status !== "returned" && (
+                    {equipmentRequestDetails.requesterId === user.uid && (equipmentRequestDetails.status === "pending" || equipmentRequestDetails.status === "approved") && (
                       <>
-                        <button onClick={handleDenyRequest} style={{...btnGhost,fontSize:11,padding:"4px 10px"}}>✗ Peru</button>
-                        {equipmentRequestDetails.status === "approved" && (
-                          <button onClick={handleMarkReturned} style={{...btnPrimary,fontSize:11,padding:"4px 10px"}}>📥 Palautettu</button>
-                        )}
+                        <button
+                          onClick={requestCancellation}
+                          disabled={Boolean(equipmentRequestDetails.cancellationRequestedAt)}
+                          style={{...btnGhost,fontSize:11,padding:"4px 10px",opacity:equipmentRequestDetails.cancellationRequestedAt?0.6:1,cursor:equipmentRequestDetails.cancellationRequestedAt?"default":"pointer"}}
+                        >
+                          {equipmentRequestDetails.cancellationRequestedAt ? "🟠 Peruutuspyyntö lähetetty" : "✉️ Pyydä peruutusta"}
+                        </button>
                       </>
+                    )}
+                    <button onClick={closeEquipmentChat} disabled={Boolean(activeDm?.closedAt)} style={{...btnGhost,fontSize:11,padding:"4px 10px",opacity:activeDm?.closedAt?0.6:1,cursor:activeDm?.closedAt?"default":"pointer"}}>
+                      {activeDm?.closedAt ? "🔒 Suljettu" : "Sulje keskustelu"}
+                    </button>
+                    {activeDm?.closedAt && isEquipmentManager && (
+                      <button onClick={reopenEquipmentChat} style={{...btnPrimary,fontSize:11,padding:"4px 10px"}}>
+                        🔓 Avaa uudelleen
+                      </button>
                     )}
                   </div>
+                </div>
+              )}
+
+              {isClosedEquipmentChat && (
+                <div style={{marginBottom:8,padding:"8px 12px",background:"rgba(245,158,11,0.1)",border:"1px solid rgba(245,158,11,0.25)",borderRadius:8,fontSize:12,color:"#f59e0b"}}>
+                  🔒 Tämä kalustokeskustelu on suljettu. Vanhat viestit ja varauksen tila näkyvät edelleen, mutta uusia viestejä ei voi lähettää.
                 </div>
               )}
 
@@ -1094,10 +1358,10 @@ export default function ChatPage() {
               )}
 
               <div style={{display:"flex",gap:8,alignItems:"center",background:"var(--bg3)",border:`1px solid ${isOverLimit?"rgba(239,68,68,0.6)":"var(--border2)"}`,borderRadius:12,padding:"10px 12px"}}>
-                <button onClick={()=>{setShowEmoji(s=>!s);setShowGif(false)}} style={iconBtn}>😊</button>
-                <button onClick={()=>{setShowGif(s=>!s);setShowEmoji(false);if(!showGif)fetchGifs("")}} style={{...iconBtn,fontSize:11,fontWeight:600}}>GIF</button>
+                <button onClick={()=>{if(isClosedEquipmentChat) return;setShowEmoji(s=>!s);setShowGif(false)}} style={{...iconBtn,opacity:isClosedEquipmentChat?0.45:1,cursor:isClosedEquipmentChat?"default":"pointer"}}>😊</button>
+                <button onClick={()=>{if(isClosedEquipmentChat) return;setShowGif(s=>!s);setShowEmoji(false);if(!showGif)fetchGifs("")}} style={{...iconBtn,fontSize:11,fontWeight:600,opacity:isClosedEquipmentChat?0.45:1,cursor:isClosedEquipmentChat?"default":"pointer"}}>GIF</button>
                 <div style={{position:"relative"}} onClick={e=>e.stopPropagation()}>
-                  <button onClick={()=>setShowAttach(s=>!s)} style={iconBtn} title="Liitä">📎</button>
+                  <button onClick={()=>{if(isClosedEquipmentChat) return;setShowAttach(s=>!s)}} style={{...iconBtn,opacity:isClosedEquipmentChat?0.45:1,cursor:isClosedEquipmentChat?"default":"pointer"}} title="Liitä">📎</button>
                   {showAttach&&(
                     <div style={{position:"absolute",bottom:36,left:0,background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:10,padding:6,minWidth:170,zIndex:10,boxShadow:"0 8px 24px rgba(0,0,0,0.5)"}}>
                       <div onClick={()=>{fileInputRef.current?.click();setShowAttach(false)}} style={{padding:"7px 12px",cursor:"pointer",fontSize:13,color:"var(--text)",borderRadius:6,display:"flex",alignItems:"center",gap:8}}>💻 Tietokoneelta</div>
@@ -1106,7 +1370,7 @@ export default function ChatPage() {
                   )}
                 </div>
                 <div style={{flex:1,position:"relative"}}>
-                  <textarea ref={textAreaRef} value={text} 
+                  <textarea ref={textAreaRef} value={text} disabled={isClosedEquipmentChat}
                     onChange={e=>{
                       const val = e.target.value
                       setText(val)
@@ -1157,7 +1421,7 @@ export default function ChatPage() {
                         if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMessage()}
                       }
                     }}
-                    placeholder={activeChannel?`Kirjoita #${activeChannel.name}...`:"Kirjoita viesti..."}
+                    placeholder={isClosedEquipmentChat?"Keskustelu on suljettu":activeChannel?`Kirjoita #${activeChannel.name}...`:"Kirjoita viesti..."}
                     rows={1} style={{width:"100%",background:"transparent",border:"none",outline:"none",color:"var(--text)",fontSize:14,resize:"none",fontFamily:"system-ui",lineHeight:1.5,maxHeight:120,boxSizing:"border-box"}}/>
                   {/* Merkkimäärälaskuri */}
                   {text.length>MAX_MSG_LENGTH*0.8&&(
@@ -1172,8 +1436,8 @@ export default function ChatPage() {
                     ? <div style={{fontSize:11,color:"#f59e0b",padding:"6px 10px",whiteSpace:"nowrap"}}>🐌 {slowModeLeft}s</div>
                     : uploading
                       ? <span style={{fontSize:12,color:"var(--text3)",padding:"6px 14px"}}>Ladataan...</span>
-                      : <button onClick={()=>sendMessage()} disabled={!canSend}
-                          style={{...btnPrimary,opacity:canSend?1:0.5}}>Lähetä</button>
+                        : <button onClick={()=>sendMessage()} disabled={!canSend || isClosedEquipmentChat}
+                          style={{...btnPrimary,opacity:canSend && !isClosedEquipmentChat ? 1 : 0.5}}>Lähetä</button>
                 }
               </div>
               {isOverLimit&&(
@@ -1465,6 +1729,73 @@ export default function ChatPage() {
                 <span style={{fontSize:12,color:"#4f7ef7"}}>💬</span>
               </div>
             ))}
+          </div>
+        </Modal>
+      )}
+
+      {showEquipmentChatPicker&&(
+        <Modal title="Kalustovaraukset" onClose={()=>setShowEquipmentChatPicker(false)}>
+          <p style={{fontSize:12,color:"var(--text3)",margin:"0 0 14px"}}>Avaa olemassa oleva keskustelu tai aloita uusi kalustovaraus kalustot sivulta.</p>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            <button onClick={()=>{navigate("/kalusto");setShowEquipmentChatPicker(false)}} style={{...btnPrimary,width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+              <span>🎒</span>
+              <span>Uusi kalustovaraus</span>
+            </button>
+
+            {openEquipmentChats.length > 0 && (
+              <div>
+                <div style={{fontSize:11,fontWeight:600,color:"var(--text3)",textTransform:"uppercase",letterSpacing:"0.07em",margin:"6px 0 8px"}}>Aktiiviset keskustelut</div>
+                <div style={{display:"flex",flexDirection:"column",gap:6,maxHeight:210,overflowY:"auto"}}>
+                  {openEquipmentChats.map(chat => (
+                    <div key={chat.id} onClick={()=>{openEquipmentChat(chat);setShowEquipmentChatPicker(false)}}
+                      style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:"var(--bg3)",borderRadius:9,cursor:"pointer",border:"1px solid rgba(255,255,255,0.06)"}}>
+                      <div style={{width:34,height:34,borderRadius:10,background:"rgba(79,126,247,0.12)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>
+                        {chat.itemEmoji || "🎒"}
+                      </div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{chat.itemName}</div>
+                        <div style={{fontSize:11,color:"var(--text3)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                          {chat.requesterId === user.uid ? "Oma varaus" : chat.requesterName || "Kalustovaraus"}
+                        </div>
+                      </div>
+                      {equipmentBadges[chat.id]?.unread > 0 && (
+                        <span style={{minWidth:18,height:18,display:"inline-flex",alignItems:"center",justifyContent:"center",borderRadius:"50%",background:"#ef4444",color:"#fff",fontSize:11,fontWeight:700}}>
+                          {equipmentBadges[chat.id].unread}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {archivedEquipmentChats.length > 0 && (
+              <div>
+                <div style={{fontSize:11,fontWeight:600,color:"var(--text3)",textTransform:"uppercase",letterSpacing:"0.07em",margin:"6px 0 8px"}}>Arkistoidut</div>
+                <div style={{display:"flex",flexDirection:"column",gap:6,maxHeight:180,overflowY:"auto"}}>
+                  {archivedEquipmentChats.map(chat => (
+                    <div key={chat.id} onClick={()=>{openEquipmentChat(chat);setShowEquipmentChatPicker(false)}}
+                      style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:"rgba(245,158,11,0.08)",borderRadius:9,cursor:"pointer",border:"1px solid rgba(245,158,11,0.14)"}}>
+                      <div style={{width:34,height:34,borderRadius:10,background:"rgba(245,158,11,0.12)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>
+                        {chat.itemEmoji || "🎒"}
+                      </div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{chat.itemName}</div>
+                        <div style={{fontSize:11,color:"var(--text3)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                          {chat.requesterId === user.uid ? "Oma varaus" : chat.requesterName || "Kalustovaraus"} · Suljettu
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {equipmentChats.length === 0 && (
+              <div style={{fontSize:12,color:"var(--text3)",background:"var(--bg3)",borderRadius:9,padding:"12px 14px"}}>
+                Kalustokeskusteluja ei ole vielä. Luo ensimmäinen varaus kalustosivulta.
+              </div>
+            )}
           </div>
         </Modal>
       )}

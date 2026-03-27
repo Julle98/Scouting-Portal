@@ -28,6 +28,7 @@ export async function registerNewUser(firebaseUser) {
     email: firebaseUser.email,
     photoURL: firebaseUser.photoURL,
     role: invite.data().role || "johtaja",   
+    roles: [invite.data().role || "johtaja"],
     joinedAt: serverTimestamp(),
     lastSeen: serverTimestamp(),
   });

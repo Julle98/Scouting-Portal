@@ -28,7 +28,7 @@ function isToday(group) {
 }
 
 export default function MeetingsPage() {
-  const { user, profile } = useAuth()
+  const { user, profile, isAdmin } = useAuth()
   const [allUsers, setAllUsers]     = useState([])
   const [selected, setSelected]     = useState(null)
   const [showReport, setShowReport] = useState(false)
@@ -46,9 +46,9 @@ export default function MeetingsPage() {
 
   useEffect(() => {
     return onSnapshot(collection(db, "users"), snap =>
-      setAllUsers(snap.docs.map(d => ({ id:d.id, ...d.data() })).filter(u => !u.isInvisible))
+      setAllUsers(snap.docs.map(d => ({ id:d.id, ...d.data() })).filter(u => isAdmin || !u.isInvisible))
     )
-  }, [])
+  }, [isAdmin])
 
   // Etsi käyttäjä nimen perusteella (etu- tai sukunimi riittää)
   function findUser(leaderName) {

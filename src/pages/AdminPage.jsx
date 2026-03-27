@@ -80,8 +80,49 @@ export default function AdminPage() {
     alert("Kutsu lähetetty!")
   }
 
-  async function changeRole(uid, role) {
-    await updateDoc(doc(db, "users", uid), { role, updatedAt: serverTimestamp() })
+  function getUserRoles(u) {
+    const list = Array.isArray(u?.roles) ? u.roles : []
+    const merged = Array.from(new Set([...list, u?.role].filter(Boolean)))
+    return merged.length ? merged : ["johtaja"]
+  }
+
+  function getRoleRank(roleName) {
+    const idx = roles.indexOf(roleName)
+    return idx === -1 ? Number.MAX_SAFE_INTEGER : idx
+  }
+
+  function getPrimaryRoleFromList(roleList, preferred = null) {
+    if (preferred && roleList.includes(preferred)) return preferred
+    return [...roleList].sort((a, b) => getRoleRank(a) - getRoleRank(b))[0] || "johtaja"
+  }
+
+  function getUserRank(u) {
+    return Math.min(...getUserRoles(u).map(getRoleRank))
+  }
+
+  async function setUserRoles(uid, nextRoles, preferredPrimary = null) {
+    const normalized = Array.from(new Set(nextRoles.filter(r => roles.includes(r))))
+    const finalRoles = normalized.length ? normalized : ["johtaja"]
+    const primaryRole = getPrimaryRoleFromList(finalRoles, preferredPrimary)
+    await updateDoc(doc(db, "users", uid), {
+      role: primaryRole,
+      roles: finalRoles,
+      updatedAt: serverTimestamp(),
+    })
+  }
+
+  async function changeRole(userRow, role) {
+    const current = getUserRoles(userRow)
+    const withPrimary = Array.from(new Set([role, ...current]))
+    await setUserRoles(userRow.id, withPrimary, role)
+  }
+
+  async function toggleUserRole(userRow, roleName) {
+    const current = getUserRoles(userRow)
+    const next = current.includes(roleName)
+      ? current.filter(r => r !== roleName)
+      : [...current, roleName]
+    await setUserRoles(userRow.id, next)
   }
 
   async function removeUser(uid) {
@@ -138,8 +179,13 @@ export default function AdminPage() {
     const val = renamingRole.value.trim().toLowerCase().replace(/\s+/g, "_")
     if (!val || (val !== renamingRole.original && roles.includes(val))) { setRenamingRole(null); return }
     setRoles(prev => prev.map(r => r === renamingRole.original ? val : r))
-    // Update users that had the old role
-    users.filter(u => u.role === renamingRole.original).forEach(u => changeRole(u.id, val))
+    // Update users that had the old role in primary role or roles list
+    users
+      .filter(u => getUserRoles(u).includes(renamingRole.original))
+      .forEach(u => {
+        const nextRoles = getUserRoles(u).map(r => (r === renamingRole.original ? val : r))
+        setUserRoles(u.id, nextRoles)
+      })
     setRenamingRole(null)
   }
 
@@ -194,9 +240,11 @@ export default function AdminPage() {
                 </thead>
                 <tbody>
                   {users.map(u => {
-                    const myRoleIdx    = roles.indexOf(profile?.role)
-                    const theirRoleIdx = roles.indexOf(u.role)
-                    const canManage    = u.id !== user.uid && (myRoleIdx !== -1 && theirRoleIdx !== -1 ? myRoleIdx < theirRoleIdx : isAdmin)
+                    const myRoleIdx = getRoleRank(profile?.role)
+                    const theirRoleIdx = getUserRank(u)
+                    const canManage = myRoleIdx < theirRoleIdx || isAdmin
+                    const canRemove = u.id !== user.uid && canManage
+                    const selectedRoles = getUserRoles(u)
                     return (
                     <tr key={u.id} style={{ borderBottom:"1px solid rgba(255,255,255,0.04)" }}>
                       <td style={{ padding:"10px 16px" }}>
@@ -209,13 +257,7 @@ export default function AdminPage() {
                       </td>
                       <td style={{ padding:"10px 16px", fontSize:12, color:"var(--text2)" }}>{u.email}</td>
                       <td style={{ padding:"10px 16px" }}>
-                        {!canManage
-                          ? <span style={{ fontSize:12, color:"var(--text3)" }}>{u.role}</span>
-                          : <select value={u.role||"johtaja"} onChange={e => changeRole(u.id, e.target.value)}
-                              style={{ background:"var(--bg3)", border:"1px solid var(--border2)", borderRadius:6, padding:"4px 8px", color:"var(--text)", fontSize:12, fontFamily:"system-ui", cursor:"pointer", outline:"none" }}>
-                              {roles.filter((_, ri) => myRoleIdx === -1 || ri > myRoleIdx).map(r => <option key={r} value={r}>{r}</option>)}
-                            </select>
-                        }
+                        <span style={{ fontSize:12, color:"var(--text3)" }}>{selectedRoles.join(", ")}</span>
                       </td>
                       <td style={{ padding:"10px 16px" }}>
                         <span style={{ fontSize:12, display:"flex", alignItems:"center", gap:5 }}>
@@ -225,7 +267,7 @@ export default function AdminPage() {
                         </span>
                       </td>
                       <td style={{ padding:"10px 16px" }}>
-                        {canManage && (
+                        {canRemove && (
                           <button onClick={() => removeUser(u.id)}
                             style={{ background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.2)", borderRadius:6, color:"#f87171", padding:"4px 10px", cursor:"pointer", fontSize:12, fontFamily:"system-ui" }}>
                             Poista
@@ -295,7 +337,7 @@ export default function AdminPage() {
                           </span>
                       }
                       <span style={{ fontSize:10, color:"var(--text3)", whiteSpace:"nowrap" }}>
-                        {users.filter(u => u.role===r).length} hlö
+                        {users.filter(u => getUserRoles(u).includes(r)).length} hlö
                       </span>
                       {/* Nimeä uudelleen */}
                       {renamingRole?.original === r
@@ -334,43 +376,15 @@ export default function AdminPage() {
                 {roleMsg && <span style={{ marginLeft:10, fontSize:13, color:"#22c55e" }}>{roleMsg}</span>}
               </div>
 
-              {/* Oikea: roolien jako käyttäjille + potkiminen */}
+              {/* Oikea: roolien hallinnan ohjaus Johtajat-sivulle */}
               <div>
-                <h3 style={{ fontSize:15, margin:"0 0 6px" }}>Jäsenet & roolit</h3>
-                <p style={{ fontSize:12, color:"var(--text3)", marginBottom:14, lineHeight:1.5 }}>
-                  Voit vaihtaa roolia tai poistaa käyttäjän vain jos sinulla on korkeampi rooli.
+                <h3 style={{ fontSize:15, margin:"0 0 6px" }}>Roolien jako</h3>
+                <p style={{ fontSize:12, color:"var(--text3)", marginBottom:14, lineHeight:1.6 }}>
+                  Roolien lisäys ja poisto on siirretty Johtajat-sivun + -painikkeeseen.
+                  Avaa Johtajat-sivu ja klikkaa käyttäjän kohdalla + muokataksesi useita rooleja.
                 </p>
-                <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-                  {users.map(u => {
-                    const myRoleIdx   = roles.indexOf(profile?.role)
-                    const theirRoleIdx = roles.indexOf(u.role)
-                    const canManage   = u.id !== user.uid && (myRoleIdx !== -1 && theirRoleIdx !== -1 ? myRoleIdx < theirRoleIdx : isAdmin)
-                    return (
-                      <div key={u.id} style={{ display:"flex", alignItems:"center", gap:8, background:"var(--bg3)", border:"1px solid var(--border)", borderRadius:8, padding:"8px 12px" }}>
-                        <Avatar src={u.photoURL} name={u.displayName} size={26} />
-                        <div style={{ flex:1, minWidth:0 }}>
-                          <div style={{ fontSize:13, fontWeight:500, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                            {u.displayName}
-                            {u.id===user.uid && <span style={{ fontSize:10, color:"var(--text3)", marginLeft:5 }}>(sinä)</span>}
-                          </div>
-                          <div style={{ fontSize:10, color:"var(--text3)" }}>#{roles.indexOf(u.role)+1} {u.role||"–"}</div>
-                        </div>
-                        {canManage
-                          ? <>
-                              <select value={u.role||"johtaja"} onChange={e => changeRole(u.id, e.target.value)}
-                                style={{ background:"var(--bg)", border:"1px solid var(--border2)", borderRadius:6, padding:"4px 8px", color:"var(--text)", fontSize:11, fontFamily:"system-ui", cursor:"pointer", outline:"none", maxWidth:110 }}>
-                                {roles.filter((_, ri) => myRoleIdx === -1 || ri > myRoleIdx).map(r => <option key={r} value={r}>{r}</option>)}
-                              </select>
-                              <button onClick={() => removeUser(u.id)}
-                                style={{ background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.2)", borderRadius:6, color:"#f87171", padding:"4px 8px", cursor:"pointer", fontSize:11, fontFamily:"system-ui", whiteSpace:"nowrap" }}>
-                                Poista
-                              </button>
-                            </>
-                          : <span style={{ fontSize:11, color:"var(--text3)" }}>{u.role}</span>
-                        }
-                      </div>
-                    )
-                  })}
+                <div style={{ background:"var(--bg3)", border:"1px solid var(--border)", borderRadius:10, padding:"12px 14px", fontSize:12, color:"var(--text2)" }}>
+                  Vinkki: rooli poistuu klikkaamalla valitun roolin nappia uudelleen.
                 </div>
               </div>
             </div>

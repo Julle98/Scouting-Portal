@@ -75,15 +75,9 @@ function TermsModal({ type, onClose, showBackToLogin = false, onBackToLogin }) {
             <p><strong style={{ color:"var(--text)" }}>Oikeutesi</strong><br/>Voit poistaa tilisi ja tietosi koska tahansa profiiliasetuksista.</p>
           </div>
         )}
-        <div style={{ marginTop:16, display:"flex", gap:8 }}>
-          {showBackToLogin && (
-            <button onClick={onBackToLogin}
-              style={{ flex:1, padding:"9px", background:"transparent", border:"1px solid var(--border2)", borderRadius:8, color:"var(--text2)", fontSize:13, cursor:"pointer", fontFamily:"system-ui" }}>
-              ← Palaa kirjautumiseen
-            </button>
-          )}
+        <div style={{ marginTop:16 }}>
           <button onClick={onClose}
-            style={{ flex:1, padding:"9px", background:"#4f7ef7", border:"none", borderRadius:8, color:"#fff", fontSize:13, cursor:"pointer", fontFamily:"system-ui" }}>
+            style={{ width:"100%", padding:"12px", background:"#4f7ef7", border:"none", borderRadius:10, color:"#fff", fontSize:14, fontWeight:500, cursor:"pointer", fontFamily:"system-ui" }}>
             Sulje
           </button>
         </div>
@@ -341,9 +335,6 @@ export default function LoginPage({ initialLegal = null }) {
           <div style={{ display:"flex", justifyContent:"center", gap:8, flexWrap:"wrap" }}>
             <Link to={TERMS_URL} style={s.legalBtn}>📋 Käyttöehdot</Link>
             <Link to={PRIVACY_URL} style={s.legalBtn}>🔐 Tietosuojakäytäntö</Link>
-          </div>
-          <div style={{ marginTop:8, fontSize:11, color:"var(--text3)", textAlign:"center" }}>
-            🕒 Viimeksi päivitetty: {LEGAL_UPDATED_AT}
           </div>
         </div>
       </div>

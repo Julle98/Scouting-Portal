@@ -97,9 +97,9 @@ export default function MainLayout() {
 
   useEffect(() => {
     return onSnapshot(collection(db, "users"), snap =>
-      setAllUsers(snap.docs.map(d => ({ id:d.id, ...d.data() })).filter(u => !u.isDebug))
+      setAllUsers(snap.docs.map(d => ({ id:d.id, ...d.data() })).filter(u => isAdmin || !u.isDebug))
     )
-  }, [])
+  }, [isAdmin])
 
   useEffect(() => {
     const pageLabel = location.pathname.startsWith("/chat")
@@ -155,7 +155,7 @@ export default function MainLayout() {
     const url = new URL(window.location.href)
     if (!url.searchParams.has("_refresh")) return
 
-    pushToast(`Sivusto paivitetty automaattisesti versiolle ${VERSION}`, "success")
+    pushToast(`Sivusto päivitetty versiolle ${VERSION} ✓`, "success")
     url.searchParams.delete("_refresh")
     window.history.replaceState({}, "", url.toString())
   }, [])
@@ -169,7 +169,7 @@ export default function MainLayout() {
       const unread = Number(e?.detail?.totalUnread || 0)
       if (user && unread > 0 && !hasShownUnreadToast) {
         const label = unread === 1 ? "lukematon viesti" : "lukematonta viestiä"
-        pushToast(`Sinulla on ${unread} ${label}`, "info")
+        pushToast(`Sinulla on ${unread} ${label} 💬`, "info")
         setHasShownUnreadToast(true)
       }
 

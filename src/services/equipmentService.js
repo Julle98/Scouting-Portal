@@ -68,7 +68,13 @@ export async function approveReservation(itemId, reservationId) {
 }
 
 export async function denyReservation(itemId, reservationId, quantity) {
-  await updateDoc(doc(db, "equipment", itemId, "reservations", reservationId), {
+  const reservationRef = doc(db, "equipment", itemId, "reservations", reservationId);
+  const reservationSnap = await getDoc(reservationRef);
+  const currentStatus = reservationSnap.data()?.status;
+
+  if (currentStatus === "denied" || currentStatus === "returned") return;
+
+  await updateDoc(reservationRef, {
     status: "denied", deniedAt: serverTimestamp(),
   });
   const snap = await getDoc(doc(db, "equipment", itemId));
@@ -78,7 +84,13 @@ export async function denyReservation(itemId, reservationId, quantity) {
 }
 
 export async function markReturned(itemId, reservationId, quantity) {
-  await updateDoc(doc(db, "equipment", itemId, "reservations", reservationId), {
+  const reservationRef = doc(db, "equipment", itemId, "reservations", reservationId);
+  const reservationSnap = await getDoc(reservationRef);
+  const currentStatus = reservationSnap.data()?.status;
+
+  if (currentStatus === "returned" || currentStatus === "denied") return;
+
+  await updateDoc(reservationRef, {
     status: "returned", returnedAt: serverTimestamp(),
   });
   const snap = await getDoc(doc(db, "equipment", itemId));
