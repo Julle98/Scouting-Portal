@@ -1,5 +1,51 @@
 // src/pages/LoadingScreen.jsx
-export default function LoadingScreen({ message = "Ladataan..." }) {
+import { useEffect, useRef, useState } from "react"
+import { renderRecaptchaWidget } from "../services/recaptchaService"
+
+export default function LoadingScreen({ message = "Ladataan...", captchaSiteKey = "", onCaptchaVerified = null }) {
+  const [captchaError, setCaptchaError] = useState("")
+  const captchaContainerRef = useRef(null)
+  const captchaWidgetIdRef = useRef(null)
+
+  useEffect(() => {
+    if (!captchaSiteKey) return
+    if (!captchaContainerRef.current) return
+    if (captchaWidgetIdRef.current !== null) return
+
+    let cancelled = false
+
+    ;(async () => {
+      try {
+        const widgetId = await renderRecaptchaWidget({
+          container: captchaContainerRef.current,
+          siteKey: captchaSiteKey,
+          onVerify: (token) => {
+            if (!token || cancelled) return
+            onCaptchaVerified?.(token)
+          },
+          onExpired: () => {
+            if (!cancelled) setCaptchaError("reCAPTCHA vanheni, vahvista uudelleen.")
+          },
+          onError: () => {
+            if (!cancelled) setCaptchaError("reCAPTCHA-virhe. Yrita hetken kuluttua uudelleen.")
+          },
+        })
+        if (!cancelled) {
+          captchaWidgetIdRef.current = widgetId
+          setCaptchaError("")
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setCaptchaError(err?.message || "reCAPTCHA:n lataus epaonnistui.")
+        }
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [captchaSiteKey, onCaptchaVerified])
+
   const prefersDark =
     typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches
 
@@ -21,6 +67,14 @@ export default function LoadingScreen({ message = "Ladataan..." }) {
       </div>
       <div style={{ fontSize:14, color:`var(--text2, ${text2})`, fontWeight:500 }}>{message}</div>
       <div style={{ fontSize:11, color:`var(--text3, ${text3})`, marginTop:6 }}>Maahiset-portaali</div>
+      {captchaSiteKey && (
+        <div style={{ marginTop: 16, display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+          <div ref={captchaContainerRef} />
+          {captchaError && (
+            <div style={{ fontSize: 11, color: "#f87171", textAlign: "center" }}>{captchaError}</div>
+          )}
+        </div>
+      )}
       <style>{`@keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }`}</style>
     </div>
   )

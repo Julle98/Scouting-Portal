@@ -1,5 +1,5 @@
 // src/pages/LoginPage.jsx
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
 import { useAuth } from "../contexts/AuthContext"
 import LoadingScreen from "./LoadingScreen"
@@ -10,8 +10,10 @@ import {
 } from "firebase/auth"
 import { collection, query, where, getDocs } from "firebase/firestore"
 import { auth, db } from "../services/firebase"
+import { renderRecaptchaWidget } from "../services/recaptchaService"
 
 const ALLOWED_DOMAIN = import.meta.env.VITE_ALLOWED_DOMAIN
+const RECAPTCHA_SITE_KEY = (import.meta.env.VITE_RECAPTCHA_SITE_KEY || "").trim()
 const TERMS_URL = "/kayttoehdot"
 const PRIVACY_URL = "/tietosuoja"
 const LEGAL_UPDATED_AT = import.meta.env.VITE_LEGAL_UPDATED_AT
@@ -99,6 +101,14 @@ export default function LoginPage({ initialLegal = null }) {
   const [submitting, setSubmitting] = useState(false)
   const [termsAccepted, setTermsAccepted] = useState(false)
   const [showTermsModal, setShowTermsModal] = useState(null)
+  const [captchaError, setCaptchaError] = useState("")
+  const [humanVerified, setHumanVerified] = useState(() => {
+    if (typeof window === "undefined") return false
+    return sessionStorage.getItem("humanVerified") === "1"
+  })
+  const captchaContainerRef = useRef(null)
+  const captchaWidgetIdRef = useRef(null)
+  const isLegalRoute = location.pathname === "/kayttoehdot" || location.pathname === "/tietosuoja"
 
   useEffect(() => {
     applySystemTheme()
@@ -125,7 +135,60 @@ export default function LoginPage({ initialLegal = null }) {
     if (initialLegal) setShowTermsModal(initialLegal)
   }, [location.pathname, initialLegal])
 
-  const isLegalRoute = location.pathname === "/kayttoehdot" || location.pathname === "/tietosuoja"
+  useEffect(() => {
+    if (loading) return
+    if (!RECAPTCHA_SITE_KEY || humanVerified || isLegalRoute) return
+    if (!captchaContainerRef.current) return
+    if (captchaWidgetIdRef.current !== null) return
+
+    let cancelled = false
+
+    ;(async () => {
+      try {
+        const widgetId = await renderRecaptchaWidget({
+          container: captchaContainerRef.current,
+          siteKey: RECAPTCHA_SITE_KEY,
+          onVerify: (token) => {
+            if (!token || cancelled) return
+            setHumanVerified(true)
+            setCaptchaError("")
+            if (typeof window !== "undefined") sessionStorage.setItem("humanVerified", "1")
+          },
+          onExpired: () => {
+            if (!cancelled) {
+              setHumanVerified(false)
+              setCaptchaError("reCAPTCHA vanheni, vahvista uudelleen.")
+              if (typeof window !== "undefined") sessionStorage.removeItem("humanVerified")
+            }
+          },
+          onError: () => {
+            if (!cancelled) setCaptchaError("reCAPTCHA-virhe. Yrita hetken kuluttua uudelleen.")
+          },
+        })
+        if (!cancelled) captchaWidgetIdRef.current = widgetId
+      } catch (err) {
+        if (!cancelled) setCaptchaError(err?.message || "reCAPTCHA:n lataus epaonnistui.")
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [loading, humanVerified, isLegalRoute])
+
+  if (user && !isLegalRoute && RECAPTCHA_SITE_KEY && !humanVerified) {
+    return (
+      <LoadingScreen
+        message="Vahvista ensin reCAPTCHA jatkaaksesi"
+        captchaSiteKey={RECAPTCHA_SITE_KEY}
+        onCaptchaVerified={() => {
+          setHumanVerified(true)
+          if (typeof window !== "undefined") sessionStorage.setItem("humanVerified", "1")
+        }}
+      />
+    )
+  }
+
   if (user && !isLegalRoute) { navigate("/"); return null }
 
   // Aseta selaimen otsikko kirjautumissivulle
@@ -142,6 +205,10 @@ export default function LoginPage({ initialLegal = null }) {
   async function handleEmailAuth(ev) {
     ev.preventDefault()
     setError(""); setInfo("")
+    if (RECAPTCHA_SITE_KEY && !humanVerified) {
+      setError("Vahvista reCAPTCHA ennen kirjautumista tai tilin luontia.")
+      return
+    }
     if (mode === "login" && !validateEmail(email)) {
       setError(`Vain @${ALLOWED_DOMAIN}-osoitteet sallittu.`)
       return
@@ -181,6 +248,10 @@ export default function LoginPage({ initialLegal = null }) {
   async function handleReset(ev) {
     ev.preventDefault()
     setError(""); setInfo("")
+    if (RECAPTCHA_SITE_KEY && !humanVerified) {
+      setError("Vahvista reCAPTCHA ennen salasanan palautusta.")
+      return
+    }
     if (!validateEmail(email)) { setError(`Vain @${ALLOWED_DOMAIN}-osoitteet sallittu.`); return }
     setSubmitting(true)
     try {
@@ -190,6 +261,16 @@ export default function LoginPage({ initialLegal = null }) {
       setError("Virhe: " + err.message)
     }
     setSubmitting(false)
+  }
+
+  async function handleGoogleLogin() {
+    setError("")
+    setInfo("")
+    if (RECAPTCHA_SITE_KEY && !humanVerified) {
+      setError("Vahvista reCAPTCHA ennen Google-kirjautumista.")
+      return
+    }
+    await loginWithGoogle()
   }
 
   return (
@@ -229,7 +310,7 @@ export default function LoginPage({ initialLegal = null }) {
           {/* Google */}
           {tab === "google" && (
             <div>
-            <button onClick={loginWithGoogle} style={s.googleBtn}>
+            <button onClick={handleGoogleLogin} style={s.googleBtn}>
               <svg width="18" height="18" viewBox="0 0 18 18">
                 <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/>
                 <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/>
@@ -242,6 +323,19 @@ export default function LoginPage({ initialLegal = null }) {
               Kirjaudu <strong style={{ color:"var(--text2)" }}>@{ALLOWED_DOMAIN}</strong> Google-tilillä tai millä tahansa kutsutulla tilillä
             </p>
             {(authError || error) && <div style={s.errBox}>{authError || error}</div>}
+            </div>
+          )}
+
+          {RECAPTCHA_SITE_KEY && !isLegalRoute && !humanVerified && (
+            <div style={{ marginTop: 16, padding: "10px 0", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+              <div ref={captchaContainerRef} />
+              {captchaError && <div style={{ ...s.errBox, marginTop: 0, width: "100%" }}>{captchaError}</div>}
+            </div>
+          )}
+
+          {!RECAPTCHA_SITE_KEY && !isLegalRoute && (
+            <div style={{ ...s.errBox, marginTop: 16 }}>
+              reCAPTCHA ei ole kaytossa: VITE_RECAPTCHA_SITE_KEY puuttuu.
             </div>
           )}
 
