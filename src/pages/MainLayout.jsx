@@ -1,5 +1,5 @@
 // src/pages/MainLayout.jsx
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom"
 import { useAuth } from "../contexts/AuthContext"
 import { db } from "../services/firebase"
@@ -11,6 +11,10 @@ import ProfilePage from "./ProfilePage"
 import AdminPage from "./AdminPage"
 import MeetingsPage from "./MeetingsPage"
 import SettingsPage from "./SettingsPage"
+
+const VERSION = import.meta.env.VITE_VERSION 
+const TOAST_VISIBLE_MS = 7000
+const TOAST_FADE_MS = 450
 
 const NAV = [
   { path:"/chat",     icon:"💬", label:"Chat" },
@@ -78,6 +82,8 @@ export default function MainLayout() {
   const [showTerms, setShowTerms]   = useState(null) // "terms" | "privacy"
   const [inviteEmail, setInviteEmail] = useState("")
   const [chatHasBadge, setChatHasBadge] = useState(localStorage.getItem("chatAlert") === "1")
+  const [hasShownUnreadToast, setHasShownUnreadToast] = useState(false)
+  const toastTimersRef = useRef({})
 
   useEffect(() => {
     if (!user) return
@@ -131,8 +137,28 @@ export default function MainLayout() {
   useEffect(() => {
     if (user && profile?.displayName) {
       pushToast(`Tervetuloa, ${profile.displayName.split(" ")[0]}! 👋`, "success")
+
+      const unread = Number(localStorage.getItem("chatUnreadTotal") || "0") || 0
+      if (unread > 0 && !hasShownUnreadToast) {
+        const label = unread === 1 ? "lukematon viesti" : "lukematonta viestiä"
+        pushToast(`Sinulla on ${unread} ${label}`, "info")
+        setHasShownUnreadToast(true)
+      }
     }
-  }, [profile?.displayName])
+  }, [user?.uid, profile?.displayName])
+
+  useEffect(() => {
+    setHasShownUnreadToast(false)
+  }, [user?.uid])
+
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    if (!url.searchParams.has("_refresh")) return
+
+    pushToast(`Sivusto paivitetty automaattisesti versiolle ${VERSION}`, "success")
+    url.searchParams.delete("_refresh")
+    window.history.replaceState({}, "", url.toString())
+  }, [])
 
   useEffect(() => {
     const syncBadge = () => {
@@ -140,6 +166,13 @@ export default function MainLayout() {
     }
 
     const onBadgeChange = (e) => {
+      const unread = Number(e?.detail?.totalUnread || 0)
+      if (user && unread > 0 && !hasShownUnreadToast) {
+        const label = unread === 1 ? "lukematon viesti" : "lukematonta viestiä"
+        pushToast(`Sinulla on ${unread} ${label}`, "info")
+        setHasShownUnreadToast(true)
+      }
+
       if (typeof e?.detail?.hasChatAlert === "boolean") {
         setChatHasBadge(e.detail.hasChatAlert)
       } else {
@@ -155,17 +188,51 @@ export default function MainLayout() {
       window.removeEventListener("chatBadgesChanged", onBadgeChange)
       window.removeEventListener("storage", syncBadge)
     }
-  }, [])
+  }, [user, hasShownUnreadToast])
+
+  function scheduleToastRemoval(id) {
+    const current = toastTimersRef.current[id]
+    if (current?.closeTimer) clearTimeout(current.closeTimer)
+    if (current?.removeTimer) clearTimeout(current.removeTimer)
+
+    const closeTimer = setTimeout(() => {
+      setToasts(prev => prev.map(t => (t.id === id ? { ...t, closing: true } : t)))
+    }, TOAST_VISIBLE_MS)
+
+    const removeTimer = setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id))
+      delete toastTimersRef.current[id]
+    }, TOAST_VISIBLE_MS + TOAST_FADE_MS)
+
+    toastTimersRef.current[id] = { closeTimer, removeTimer }
+  }
 
   function pushToast(msg, type="success") {
-    const id = Date.now()
-    setToasts(prev => [...prev, { id, msg, type }])
-    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3500)
+    setToasts(prev => {
+      const existing = prev.find(t => t.msg === msg && t.type === type && !t.closing)
+      if (existing) {
+        const next = prev.map(t => (t.id === existing.id ? { ...t, count: (t.count || 1) + 1 } : t))
+        queueMicrotask(() => scheduleToastRemoval(existing.id))
+        return next
+      }
+
+      const id = Date.now() + Math.random()
+      const next = [...prev, { id, msg, type, count: 1, closing: false }]
+      queueMicrotask(() => scheduleToastRemoval(id))
+      return next
+    })
   }
 
   useEffect(() => {
     window.__pushToast = pushToast
-    return () => { delete window.__pushToast }
+    return () => {
+      delete window.__pushToast
+      Object.values(toastTimersRef.current).forEach(t => {
+        clearTimeout(t.closeTimer)
+        clearTimeout(t.removeTimer)
+      })
+      toastTimersRef.current = {}
+    }
   }, [])
 
   async function sendQuickInvite() {
@@ -314,9 +381,15 @@ export default function MainLayout() {
             padding:"10px 20px", fontSize:13, color:"var(--text)", whiteSpace:"nowrap",
             boxShadow:"0 8px 24px rgba(0,0,0,0.5)", pointerEvents:"all",
             borderBottom: t.type==="success"?"3px solid #22c55e":t.type==="error"?"3px solid #ef4444":"3px solid #4f7ef7",
-            animation:"toastIn 0.25s ease",
+            animation: t.closing ? `toastOut ${TOAST_FADE_MS}ms ease forwards` : "toastIn 0.25s ease",
+            display:"flex", alignItems:"center", gap:8,
           }}>
-            {t.msg}
+            <span>{t.msg}</span>
+            {t.count > 1 && (
+              <span style={{fontSize:11,color:"var(--text2)",background:"rgba(255,255,255,0.08)",padding:"1px 6px",borderRadius:10}}>
+                x{t.count}
+              </span>
+            )}
           </div>
         ))}
       </div>
@@ -382,7 +455,7 @@ export default function MainLayout() {
         </div>
       )}
 
-      <style>{`@keyframes toastIn { from { opacity:0; transform:translateY(12px) } to { opacity:1; transform:translateY(0) } }`}</style>
+      <style>{`@keyframes toastIn { from { opacity:0; transform:translateY(12px) } to { opacity:1; transform:translateY(0) } } @keyframes toastOut { from { opacity:1; transform:translateY(0) } to { opacity:0; transform:translateY(8px) } }`}</style>
     </div>
   )
 }

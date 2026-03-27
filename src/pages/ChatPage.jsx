@@ -166,12 +166,17 @@ export default function ChatPage() {
   }, [channels, allUsers, user.uid, profile])
 
   useEffect(() => {
+    const totalChannelUnread = Object.values(channelBadges).reduce((sum, b) => sum + (b?.unread || 0), 0)
     const totalMentions = Object.values(channelBadges).reduce((sum, b) => sum + (b?.mentions || 0), 0)
     const totalDmUnread = Object.values(dmBadges).reduce((sum, b) => sum + (b?.unread || 0), 0)
+    const totalUnread = totalChannelUnread + totalDmUnread
     const hasChatAlert = totalMentions > 0 || totalDmUnread > 0
     localStorage.setItem("chatAlert", hasChatAlert ? "1" : "0")
+    localStorage.setItem("chatUnreadTotal", String(totalUnread))
     window.dispatchEvent(
-      new CustomEvent("chatBadgesChanged", { detail: { hasChatAlert, totalMentions, totalDmUnread } })
+      new CustomEvent("chatBadgesChanged", {
+        detail: { hasChatAlert, totalMentions, totalDmUnread, totalChannelUnread, totalUnread }
+      })
     )
   }, [channelBadges, dmBadges])
 

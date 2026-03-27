@@ -19,6 +19,8 @@ export default function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/kirjaudu" element={<LoginPage />} />
+            <Route path="/kayttoehdot" element={<LoginPage initialLegal="terms" />} />
+            <Route path="/tietosuoja" element={<LoginPage initialLegal="privacy" />} />
             <Route path="/*" element={
               <ProtectedRoute>
                 <MainLayout />

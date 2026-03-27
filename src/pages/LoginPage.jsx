@@ -1,6 +1,6 @@
 // src/pages/LoginPage.jsx
 import { useState, useEffect } from "react"
-import { useNavigate } from "react-router-dom"
+import { Link, useLocation, useNavigate } from "react-router-dom"
 import { useAuth } from "../contexts/AuthContext"
 import LoadingScreen from "./LoadingScreen"
 import {
@@ -12,6 +12,9 @@ import { collection, query, where, getDocs } from "firebase/firestore"
 import { auth, db } from "../services/firebase"
 
 const ALLOWED_DOMAIN = import.meta.env.VITE_ALLOWED_DOMAIN
+const TERMS_URL = "/kayttoehdot"
+const PRIVACY_URL = "/tietosuoja"
+const LEGAL_UPDATED_AT = import.meta.env.VITE_LEGAL_UPDATED_AT
 
 const THEMES = {
   dark: {
@@ -46,12 +49,16 @@ function applySystemTheme() {
   document.body.style.color = vars["--text"]
 }
 
-function TermsModal({ type, onClose }) {
+function TermsModal({ type, onClose, showBackToLogin = false, onBackToLogin }) {
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.8)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:500 }}
       onClick={onClose}>
       <div style={{ background:"var(--bg2)", border:"1px solid var(--border2)", borderRadius:16, padding:28, width:460, maxWidth:"90vw", maxHeight:"75vh", overflowY:"auto", fontFamily:"system-ui" }}
         onClick={e => e.stopPropagation()}>
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+          <img src="/favicon.png" alt="Maahiset" style={{ width:24, height:24, objectFit:"contain", borderRadius:6, border:"1px solid var(--border2)", background:"var(--bg3)" }} />
+          <span style={{ fontSize:12, color:"var(--text3)", letterSpacing:"0.04em", textTransform:"uppercase" }}>Maahiset RY</span>
+        </div>
         <h3 style={{ margin:"0 0 16px", fontSize:16, color:"var(--text)" }}>
           {type === "terms" ? "📋 Käyttöehdot" : "🔐 Tietosuojakäytäntö"}
         </h3>
@@ -68,18 +75,27 @@ function TermsModal({ type, onClose }) {
             <p><strong style={{ color:"var(--text)" }}>Oikeutesi</strong><br/>Voit poistaa tilisi ja tietosi koska tahansa profiiliasetuksista.</p>
           </div>
         )}
-        <button onClick={onClose}
-          style={{ marginTop:16, width:"100%", padding:"9px", background:"#4f7ef7", border:"none", borderRadius:8, color:"#fff", fontSize:13, cursor:"pointer", fontFamily:"system-ui" }}>
-          Sulje
-        </button>
+        <div style={{ marginTop:16, display:"flex", gap:8 }}>
+          {showBackToLogin && (
+            <button onClick={onBackToLogin}
+              style={{ flex:1, padding:"9px", background:"transparent", border:"1px solid var(--border2)", borderRadius:8, color:"var(--text2)", fontSize:13, cursor:"pointer", fontFamily:"system-ui" }}>
+              ← Palaa kirjautumiseen
+            </button>
+          )}
+          <button onClick={onClose}
+            style={{ flex:1, padding:"9px", background:"#4f7ef7", border:"none", borderRadius:8, color:"#fff", fontSize:13, cursor:"pointer", fontFamily:"system-ui" }}>
+            Sulje
+          </button>
+        </div>
       </div>
     </div>
   )
 }
 
-export default function LoginPage() {
+export default function LoginPage({ initialLegal = null }) {
   const { user, loading, error: authError, loginWithGoogle } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [tab, setTab]               = useState("google")
   const [mode, setMode]             = useState("login")
   const [email, setEmail]           = useState("")
@@ -103,7 +119,20 @@ export default function LoginPage() {
     }
   }, [])
 
-  if (user) { navigate("/"); return null }
+  useEffect(() => {
+    if (location.pathname === "/kayttoehdot") {
+      setShowTermsModal("terms")
+      return
+    }
+    if (location.pathname === "/tietosuoja") {
+      setShowTermsModal("privacy")
+      return
+    }
+    if (initialLegal) setShowTermsModal(initialLegal)
+  }, [location.pathname, initialLegal])
+
+  const isLegalRoute = location.pathname === "/kayttoehdot" || location.pathname === "/tietosuoja"
+  if (user && !isLegalRoute) { navigate("/"); return null }
 
   // Aseta selaimen otsikko kirjautumissivulle
   if (typeof document !== "undefined") {
@@ -171,18 +200,19 @@ export default function LoginPage() {
 
   return (
     <div style={s.wrap}>
-      <div style={s.card}>
-        <div style={{ display:"flex", justifyContent:"center", marginBottom:12 }}>
-          <div style={{ width:64, height:64, background:"var(--bg3)", borderRadius:14, display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden", border:"1px solid var(--border)" }}>
-            <img src="/favicon.png" alt="logo" style={{ width:48, height:48, objectFit:"contain" }}
-              onError={e => { e.target.style.display="none"; e.target.parentNode.innerHTML="🏕️" }} />
+      <div style={s.stack}>
+        <div style={s.card}>
+          <div style={{ display:"flex", justifyContent:"center", marginBottom:12 }}>
+            <div style={{ width:64, height:64, background:"var(--bg3)", borderRadius:14, display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden", border:"1px solid var(--border)" }}>
+              <img src="/favicon.png" alt="logo" style={{ width:48, height:48, objectFit:"contain" }}
+                onError={e => { e.target.style.display="none"; e.target.parentNode.innerHTML="🏕️" }} />
+            </div>
           </div>
-        </div>
-        <h1 style={{ fontSize:22, color:"var(--text)", fontWeight:600, textAlign:"center", margin:"0 0 4px" }}>Partio-portaali</h1>
-        <p style={{ fontSize:13, color:"var(--text2)", textAlign:"center", margin:"0 0 24px" }}>Maahiset RY | Johtajien sovellus</p>
+          <h1 style={{ fontSize:22, color:"var(--text)", fontWeight:600, textAlign:"center", margin:"0 0 4px" }}>Partio-portaali</h1>
+          <p style={{ fontSize:13, color:"var(--text2)", textAlign:"center", margin:"0 0 24px" }}>Maahiset RY | Johtajien sovellus</p>
 
-        {/* Välilehdet */}
-        <div style={{ display:"flex", gap:0, marginBottom:20, background:"var(--bg3)", borderRadius:10, padding:4 }}>
+          {/* Välilehdet */}
+          <div style={{ display:"flex", gap:0, marginBottom:20, background:"var(--bg3)", borderRadius:10, padding:4 }}>
           <button onClick={() => { setTab("google"); setError(""); setInfo("") }}
             style={{ flex:1, padding:"8px", borderRadius:8, border:"none", cursor:"pointer", fontFamily:"system-ui", fontSize:13, fontWeight:500, transition:"all 0.15s",
               background: tab==="google" ? "var(--bg2)" : "transparent",
@@ -202,9 +232,9 @@ export default function LoginPage() {
           </button>
         </div>
 
-        {/* Google */}
-        {tab === "google" && (
-          <div>
+          {/* Google */}
+          {tab === "google" && (
+            <div>
             <button onClick={loginWithGoogle} style={s.googleBtn}>
               <svg width="18" height="18" viewBox="0 0 18 18">
                 <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/>
@@ -218,12 +248,12 @@ export default function LoginPage() {
               Kirjaudu <strong style={{ color:"var(--text2)" }}>@{ALLOWED_DOMAIN}</strong> Google-tilillä tai millä tahansa kutsutulla tilillä
             </p>
             {(authError || error) && <div style={s.errBox}>{authError || error}</div>}
-          </div>
-        )}
+            </div>
+          )}
 
-        {/* Sähköposti */}
-        {tab === "email" && (
-          <div>
+          {/* Sähköposti */}
+          {tab === "email" && (
+            <div>
             {mode === "login" && (
               <div style={{ fontSize:12, color:"var(--text3)", background:"rgba(79,126,247,0.08)", border:"1px solid rgba(79,126,247,0.2)", borderRadius:8, padding:"8px 12px", marginBottom:16, lineHeight:1.5 }}>
                 🔒 Vain <strong style={{ color:"#4f7ef7" }}>@{ALLOWED_DOMAIN}</strong> -osoitteet hyväksytään
@@ -303,20 +333,42 @@ export default function LoginPage() {
                 </button>
               )}
             </div>
+            </div>
+          )}
+        </div>
+
+        <div style={s.legalDock}>
+          <div style={{ display:"flex", justifyContent:"center", gap:8, flexWrap:"wrap" }}>
+            <Link to={TERMS_URL} style={s.legalBtn}>📋 Käyttöehdot</Link>
+            <Link to={PRIVACY_URL} style={s.legalBtn}>🔐 Tietosuojakäytäntö</Link>
           </div>
-        )}
+          <div style={{ marginTop:8, fontSize:11, color:"var(--text3)", textAlign:"center" }}>
+            🕒 Viimeksi päivitetty: {LEGAL_UPDATED_AT}
+          </div>
+        </div>
       </div>
 
       {showTermsModal && (
-        <TermsModal type={showTermsModal} onClose={() => setShowTermsModal(null)} />
+        <TermsModal
+          type={showTermsModal}
+          showBackToLogin={isLegalRoute}
+          onBackToLogin={() => navigate("/kirjaudu")}
+          onClose={() => {
+            if (isLegalRoute) navigate("/kirjaudu")
+            else setShowTermsModal(null)
+          }}
+        />
       )}
     </div>
   )
 }
 
 const s = {
-  wrap:      { minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", background:"var(--bg)", fontFamily:"system-ui,sans-serif" },
+  wrap:      { minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", background:"var(--bg)", fontFamily:"system-ui,sans-serif", padding:"20px 14px" },
+  stack:     { width:380, maxWidth:"90vw", display:"flex", flexDirection:"column", gap:12 },
   card:      { background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:16, padding:"32px 28px", width:380, maxWidth:"90vw" },
+  legalDock: { background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:12, padding:"10px 12px" },
+  legalBtn:  { fontSize:12, color:"#4f7ef7", textDecoration:"none", border:"1px solid rgba(79,126,247,0.25)", background:"rgba(79,126,247,0.08)", borderRadius:999, padding:"5px 10px" },
   googleBtn: { width:"100%", padding:"12px", background:"#fff", color:"#333", border:"none", borderRadius:10, fontSize:14, fontWeight:500, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:10, fontFamily:"system-ui" },
   lbl:       { display:"block", fontSize:12, fontWeight:500, color:"var(--text2)", marginBottom:6, marginTop:12 },
   inp:       { width:"100%", background:"var(--bg3)", border:"1px solid var(--border2)", borderRadius:8, padding:"9px 12px", color:"var(--text)", fontSize:14, boxSizing:"border-box", fontFamily:"system-ui", outline:"none" },
