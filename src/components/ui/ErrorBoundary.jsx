@@ -1,25 +1,85 @@
 // src/components/ui/ErrorBoundary.jsx
 import { Component } from "react"
-import { db } from "../../services/firebase"
+import { auth, db } from "../../services/firebase"
 import { addDoc, collection, serverTimestamp } from "firebase/firestore"
 
 export class ErrorBoundary extends Component {
   constructor(props) {
     super(props)
     this.state = { hasError: false, error: null }
+    this.breadcrumbs = []
+    this.maxBreadcrumbs = 30
+    this.boundRecordClick = this.recordClick.bind(this)
+    this.boundRecordSubmit = this.recordSubmit.bind(this)
+    this.boundRecordNavigation = this.recordNavigation.bind(this)
   }
 
   static getDerivedStateFromError(error) {
     return { hasError: true, error }
   }
 
+  componentDidMount() {
+    this.recordNavigation("mount")
+    document.addEventListener("click", this.boundRecordClick, true)
+    document.addEventListener("submit", this.boundRecordSubmit, true)
+    window.addEventListener("popstate", this.boundRecordNavigation)
+    window.addEventListener("hashchange", this.boundRecordNavigation)
+  }
+
+  componentWillUnmount() {
+    document.removeEventListener("click", this.boundRecordClick, true)
+    document.removeEventListener("submit", this.boundRecordSubmit, true)
+    window.removeEventListener("popstate", this.boundRecordNavigation)
+    window.removeEventListener("hashchange", this.boundRecordNavigation)
+  }
+
+  pushBreadcrumb(entry) {
+    this.breadcrumbs.push({
+      at: new Date().toLocaleString("fi-FI"),
+      path: `${window.location.pathname}${window.location.search}${window.location.hash}`,
+      ...entry,
+    })
+    if (this.breadcrumbs.length > this.maxBreadcrumbs) this.breadcrumbs.shift()
+  }
+
+  formatTarget(target) {
+    if (!target || !(target instanceof Element)) return ""
+    const tag = target.tagName?.toLowerCase?.() || ""
+    const id = target.id ? `#${target.id}` : ""
+    const cls = target.className && typeof target.className === "string"
+      ? "." + target.className.trim().split(/\s+/).slice(0, 2).join(".")
+      : ""
+    const text = (target.textContent || "").trim().slice(0, 40)
+    return `${tag}${id}${cls}${text ? ` (${text})` : ""}`
+  }
+
+  recordClick(event) {
+    this.pushBreadcrumb({ type: "click", target: this.formatTarget(event.target) })
+  }
+
+  recordSubmit(event) {
+    this.pushBreadcrumb({ type: "submit", target: this.formatTarget(event.target) })
+  }
+
+  recordNavigation(reason = "navigation") {
+    this.pushBreadcrumb({ type: reason, target: document.title || "" })
+  }
+
   async componentDidCatch(error, info) {
     try {
+      const currentUser = auth.currentUser
       await addDoc(collection(db, "errorLog"), {
         message:   error.message,
         stack:     error.stack?.slice(0, 1000) || "",
         component: info.componentStack?.slice(0, 500) || "",
         url:       window.location.href,
+        user: {
+          uid: currentUser?.uid || null,
+          email: currentUser?.email || null,
+          displayName: currentUser?.displayName || null,
+        },
+        breadcrumbs: this.breadcrumbs.slice(-10),
+        userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
         createdAt: serverTimestamp(),
       })
     } catch {}

@@ -4,7 +4,7 @@ import { useAuth } from "../contexts/AuthContext"
 import { db } from "../services/firebase"
 import {
   collection, onSnapshot, doc, updateDoc, deleteDoc,
-  query, orderBy, where, serverTimestamp, addDoc, getDoc, setDoc, limit
+  query, orderBy, where, serverTimestamp, addDoc, setDoc
 } from "firebase/firestore"
 import { Avatar } from "../components/ui/Avatar"
 
@@ -21,7 +21,8 @@ const DEFAULT_ROLES = [
 export default function AdminPage() {
   const { user, profile, isAdmin } = useAuth()
   const [users, setUsers]         = useState([])
-  const [invites, setInvites]     = useState([])
+  const [pendingInvites, setPendingInvites] = useState([])
+  const [usedInvites, setUsedInvites] = useState([])
   const [modQueue, setModQueue]   = useState([])
   const [reports, setReports]     = useState([])
   const [roles, setRoles]         = useState(DEFAULT_ROLES)
@@ -46,8 +47,17 @@ export default function AdminPage() {
   useEffect(() => {
     const u = onSnapshot(query(collection(db, "users"), orderBy("displayName")),
       snap => setUsers(snap.docs.map(d => ({ id:d.id, ...d.data() }))))
-    const i = onSnapshot(query(collection(db, "invites"), where("used","==",false), orderBy("createdAt","desc")),
-      snap => setInvites(snap.docs.map(d => ({ id:d.id, ...d.data()})).filter(inv => !inv.expiresAt || inv.expiresAt.toDate() > new Date())))
+    const i = onSnapshot(query(collection(db, "invites"), orderBy("createdAt","desc")),
+      snap => {
+        const allInvites = snap.docs.map(d => ({ id:d.id, ...d.data() }))
+        const now = new Date()
+        setPendingInvites(allInvites.filter(inv => !inv.used && (!inv.expiresAt || inv.expiresAt.toDate() > now)))
+        setUsedInvites(allInvites.filter(inv => inv.used).sort((a, b) => {
+          const at = a.usedAt?.toDate?.()?.getTime?.() || 0
+          const bt = b.usedAt?.toDate?.()?.getTime?.() || 0
+          return bt - at
+        }))
+      })
     const m = onSnapshot(query(collection(db, "moderation"), where("status","==","pending"), orderBy("createdAt","desc")),
       snap => setModQueue(snap.docs.map(d => ({ id:d.id, ...d.data() }))))
     const r = onSnapshot(query(collection(db, "memberReports"), orderBy("createdAt","desc")),
@@ -163,7 +173,7 @@ export default function AdminPage() {
         {TAB("users",    "Käyttäjät",    0)}
         {TAB("debug",    "Debug",        users.filter(u => u.isDebug).length)}
         {TAB("roles",    "Roolit",        0)}
-        {TAB("invites",  "Kutsut",        invites.length)}
+        {TAB("invites",  "Kutsut",        pendingInvites.length)}
         {TAB("moderation","Moderointi",   modQueue.length + reports.filter(r=>r.status==="pending").length)}
         {TAB("errors",     "Virheloki",     errorLog.filter(e=>e.status!=="resolved").length)}
       </div>
@@ -392,9 +402,9 @@ export default function AdminPage() {
               </div>
             </div>
 
-            <h3 style={{ margin:"0 0 12px", fontSize:15 }}>Odottavat kutsut ({invites.length})</h3>
-            {invites.length === 0 && <p style={{ color:"#545d75", fontSize:13 }}>Ei odottavia kutsuja.</p>}
-            {invites.map(inv => (
+            <h3 style={{ margin:"0 0 12px", fontSize:15 }}>Odottavat kutsut ({pendingInvites.length})</h3>
+            {pendingInvites.length === 0 && <p style={{ color:"#545d75", fontSize:13 }}>Ei odottavia kutsuja.</p>}
+            {pendingInvites.map(inv => (
               <div key={inv.id} style={{ background:"#161b27", border:"1px solid rgba(255,255,255,0.07)", borderRadius:10, padding:"12px 16px", marginBottom:8, display:"flex", alignItems:"center", gap:12 }}>
                 <div style={{ flex:1 }}>
                   <div style={{ fontSize:13, fontWeight:500 }}>{inv.email} {inv.isDebug && <span style={{ fontSize:10, color:"#f59e0b", background:"#f59e0b20", padding:"2px 6px", borderRadius:4 }}>DEBUG</span>}</div>
@@ -406,6 +416,33 @@ export default function AdminPage() {
                 </button>
               </div>
             ))}
+
+            <h3 style={{ margin:"18px 0 12px", fontSize:15 }}>Käytetyt kutsut ({usedInvites.length})</h3>
+            {usedInvites.length === 0 && <p style={{ color:"#545d75", fontSize:13 }}>Ei käytettyjä kutsuja.</p>}
+            {usedInvites.map(inv => {
+              const usedByUser = users.find(u => u.id === inv.usedBy)
+              return (
+                <div key={inv.id} style={{ background:"#161b27", border:"1px solid rgba(255,255,255,0.07)", borderRadius:10, padding:"12px 16px", marginBottom:8, display:"flex", alignItems:"center", gap:12 }}>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:13, fontWeight:500 }}>
+                      {inv.email} {inv.isDebug && <span style={{ fontSize:10, color:"#f59e0b", background:"#f59e0b20", padding:"2px 6px", borderRadius:4 }}>DEBUG</span>}
+                    </div>
+                    <div style={{ fontSize:11, color:"#545d75" }}>
+                      Käytetty: {inv.usedAt?.toDate ? inv.usedAt.toDate().toLocaleString("fi-FI") : "Ei tietoa"}
+                    </div>
+                    <div style={{ fontSize:11, color:"#545d75" }}>
+                      Käyttäjä: {usedByUser?.displayName || inv.usedBy || "Ei tietoa"}{usedByUser?.email ? ` (${usedByUser.email})` : ""}
+                    </div>
+                    <div style={{ fontSize:11, color:"#545d75" }}>
+                      Lähettäjä: {inv.invitedByName || "Ei tietoa"}
+                    </div>
+                  </div>
+                  <span style={{ fontSize:11, color:"#22c55e", background:"rgba(34,197,94,0.12)", border:"1px solid rgba(34,197,94,0.25)", borderRadius:6, padding:"3px 8px", whiteSpace:"nowrap" }}>
+                    Käytetty
+                  </span>
+                </div>
+              )
+            })}
           </div>
         )}
 
@@ -488,6 +525,20 @@ export default function AdminPage() {
                         {e.url} · {e.createdAt?.toDate?.().toLocaleString("fi-FI")||""}
                         {isResolved && <span style={{ marginLeft:8, color:"#22c55e" }}>✓ Suoritettu</span>}
                       </div>
+                      <div style={{ fontSize:11, color:"#8b92a8", marginBottom:6 }}>
+                        Käyttäjä: {e.user?.displayName || "Tuntematon"} {e.user?.email ? `(${e.user.email})` : ""}
+                        {e.user?.uid ? ` · uid: ${e.user.uid}` : ""}
+                      </div>
+                      {!!e.breadcrumbs?.length && (
+                        <div style={{ fontSize:10, color:"#8b92a8", background:"#1e2535", padding:"6px 10px", borderRadius:6, marginBottom:6 }}>
+                          <div style={{ marginBottom:4, color:"#545d75" }}>Viimeiset toiminnot:</div>
+                          {e.breadcrumbs.slice(-6).map((b, idx) => (
+                            <div key={idx} style={{ marginBottom:2 }}>
+                              {b.at || ""} · {b.type || "event"} · {b.path || ""} {b.target ? `· ${b.target}` : ""}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       {e.stack && !isResolved && (
                         <div style={{ fontSize:10, color:"#545d75", background:"#1e2535", padding:"6px 10px", borderRadius:6, fontFamily:"monospace", overflow:"auto", maxHeight:80 }}>
                           {e.stack}
