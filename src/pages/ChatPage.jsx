@@ -54,6 +54,7 @@ export default function ChatPage() {
   const location = useLocation()
   const { chatType, chatTarget } = useParams()
   const isEquipmentManager = isAdmin || profile?.role === "kalustovastaava" || profile?.roles?.includes("kalustovastaava")
+  const dmNotesStorageKey = user?.uid ? `dmNotes_${user.uid}` : "dmNotes"
   const [channels, setChannels]       = useState([])
   const [activeChannel, setActiveChannel] = useState(null)
   const [equipmentRequestDetails, setEquipmentRequestDetails] = useState(null)
@@ -111,7 +112,13 @@ export default function ChatPage() {
   const [loadingInviteStatuses, setLoadingInviteStatuses] = useState(false)
   // DM settings
   const [dmSettings, setDmSettings]   = useState(false)
-  const [dmNotes, setDmNotes]         = useState({})
+  const [dmNotes, setDmNotes]         = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(dmNotesStorageKey) || "{}")
+    } catch {
+      return {}
+    }
+  })
   const [editingDmNote, setEditingDmNote] = useState(false)
   const [dmNoteText, setDmNoteText]   = useState("")
   const [dmReportReason, setDmReportReason] = useState("")
@@ -520,6 +527,19 @@ export default function ChatPage() {
     try { localStorage.setItem("sidebarWidth", String(sidebarWidth)) } catch {}
   }, [sidebarWidth])
 
+  useEffect(() => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(dmNotesStorageKey) || "{}")
+      setDmNotes(parsed && typeof parsed === "object" ? parsed : {})
+    } catch {
+      setDmNotes({})
+    }
+  }, [dmNotesStorageKey])
+
+  useEffect(() => {
+    try { localStorage.setItem(dmNotesStorageKey, JSON.stringify(dmNotes)) } catch {}
+  }, [dmNotes, dmNotesStorageKey])
+
   // Sivupalkin vedettävyys
   useEffect(() => {
     function onMouseMove(e) {
@@ -661,6 +681,52 @@ export default function ChatPage() {
     setShowReactionEmojiPicker(true)
     setShowEmoji(false)
     setShowGif(false)
+  }
+
+  function resolveMenuPosition(clientX, clientY, menuHeight, menuWidth = 220) {
+    const margin = 12
+    const viewportW = window.innerWidth || 1280
+    const viewportH = window.innerHeight || 720
+    const safeLeft = Math.min(
+      Math.max(margin, clientX),
+      Math.max(margin, viewportW - menuWidth - margin)
+    )
+    const spaceBelow = viewportH - clientY - margin
+    const spaceAbove = clientY - margin
+
+    let top = clientY
+    if (spaceBelow < menuHeight && spaceAbove >= menuHeight) {
+      top = clientY - menuHeight
+    } else {
+      top = Math.min(
+        Math.max(margin, clientY),
+        Math.max(margin, viewportH - menuHeight - margin)
+      )
+    }
+
+    return { x: safeLeft, y: top }
+  }
+
+  function openMessageContextMenu(e, msg) {
+    e.preventDefault()
+    e.stopPropagation()
+    const estimatedHeight = activeChannel ? 380 : 290
+    const pos = resolveMenuPosition(e.clientX, e.clientY, estimatedHeight, 230)
+    setContextMenu({ ...pos, msg })
+  }
+
+  function openSidebarContextMenu(e, payload) {
+    e.preventDefault()
+    e.stopPropagation()
+    const estimatedHeights = {
+      channel: 330,
+      notes: 170,
+      dm: 290,
+      equipment: 130,
+    }
+    const estimatedHeight = estimatedHeights[payload?.type] || 220
+    const pos = resolveMenuPosition(e.clientX, e.clientY, estimatedHeight, 240)
+    setSidebarCtxMenu({ ...pos, ...payload })
   }
 
   async function sendMessage(gifUrl=pendingGif?.url||null, gifPreview=pendingGif?.preview||null) {
@@ -1425,7 +1491,7 @@ export default function ChatPage() {
             )}
             {!loadingChannels && sortedChannels.map(ch=>(
               <div key={ch.id} onClick={()=>selectChannel(ch)}
-                onContextMenu={e=>{e.preventDefault();e.stopPropagation();setSidebarCtxMenu({x:e.clientX,y:e.clientY,type:"channel",item:ch})}}
+                onContextMenu={e=>openSidebarContextMenu(e,{type:"channel",item:ch})}
                 style={{padding:"6px 12px",cursor:"pointer",fontSize:13,borderRadius:6,margin:"1px 4px",display:"flex",alignItems:"center",gap:6,
                   background:activeChannel?.id===ch.id?"rgba(79,126,247,0.15)":"transparent",
                   color:activeChannel?.id===ch.id?"#4f7ef7":"var(--text2)"}}>
@@ -1450,7 +1516,7 @@ export default function ChatPage() {
             {/* Muistiinpanot */}
             {!hiddenNotes && (
               <div onClick={()=>{const me=allUsers.find(u=>u.id===user.uid)||{id:user.uid,displayName:"Muistiinpanot"};openDM(me)}}
-                onContextMenu={e=>{e.preventDefault();e.stopPropagation();setSidebarCtxMenu({x:e.clientX,y:e.clientY,type:"notes"})}}
+                onContextMenu={e=>openSidebarContextMenu(e,{type:"notes"})}
                 style={{padding:"5px 12px",cursor:"pointer",fontSize:13,borderRadius:6,margin:"1px 4px",display:"flex",alignItems:"center",gap:7,
                   background:activeDm?.isSelfNote?"rgba(79,126,247,0.15)":"transparent",
                   color:activeDm?.isSelfNote?"#4f7ef7":"var(--text2)"}}>
@@ -1472,7 +1538,7 @@ export default function ChatPage() {
             )}
             {!loadingDmUsers && visibleDmUsers.map(u2=>(
               <div key={u2.id} onClick={()=>openDM(u2)}
-                onContextMenu={e=>{e.preventDefault();e.stopPropagation();const dmId=[user.uid,u2.id].sort().join("_");setSidebarCtxMenu({x:e.clientX,y:e.clientY,type:"dm",item:u2,dmId})}}
+                onContextMenu={e=>{const dmId=[user.uid,u2.id].sort().join("_");openSidebarContextMenu(e,{type:"dm",item:u2,dmId})}}
                 style={{padding:"5px 10px",cursor:"pointer",fontSize:13,borderRadius:6,margin:"1px 4px",display:"flex",alignItems:"center",gap:7,
                   background:activeDm?.otherUser?.id===u2.id&&!activeDm?.isSelfNote?"rgba(79,126,247,0.15)":"transparent",
                   color:activeDm?.otherUser?.id===u2.id&&!activeDm?.isSelfNote?"#4f7ef7":"var(--text2)"}}>
@@ -1514,7 +1580,7 @@ export default function ChatPage() {
 
             {!loadingEquipmentChats && openEquipmentChats.map(chat => (
               <div key={chat.id} onClick={()=>openEquipmentChat(chat)}
-                onContextMenu={e=>{e.preventDefault();e.stopPropagation();setSidebarCtxMenu({x:e.clientX,y:e.clientY,type:"equipment",item:chat})}}
+                onContextMenu={e=>openSidebarContextMenu(e,{type:"equipment",item:chat})}
                 style={{padding:"6px 10px",cursor:"pointer",fontSize:13,borderRadius:6,margin:"1px 4px",display:"flex",alignItems:"center",gap:8,
                   background:activeDm?.id===chat.id?"rgba(79,126,247,0.15)":"transparent",
                   color:activeDm?.id===chat.id?"#4f7ef7":"var(--text2)",
@@ -1546,7 +1612,7 @@ export default function ChatPage() {
                 </div>
                 {archivedEquipmentChats.map(chat => (
                   <div key={chat.id} onClick={()=>openEquipmentChat(chat)}
-                    onContextMenu={e=>{e.preventDefault();e.stopPropagation();setSidebarCtxMenu({x:e.clientX,y:e.clientY,type:"equipment",item:chat})}}
+                    onContextMenu={e=>openSidebarContextMenu(e,{type:"equipment",item:chat})}
                     style={{padding:"6px 10px",cursor:"pointer",fontSize:13,borderRadius:6,margin:"1px 4px",display:"flex",alignItems:"center",gap:8,
                       background:activeDm?.id===chat.id?"rgba(245,158,11,0.15)":"transparent",
                       color:activeDm?.id===chat.id?"#f59e0b":"var(--text2)",
@@ -1720,7 +1786,7 @@ export default function ChatPage() {
                     )}
                     <div
                       onMouseEnter={()=>setHoverMsg(msg.id)} onMouseLeave={()=>setHoverMsg(null)}
-                      onContextMenu={e=>{e.preventDefault();e.stopPropagation();setContextMenu({x:e.clientX,y:e.clientY,msg})}}
+                      onContextMenu={e=>openMessageContextMenu(e,msg)}
                       style={{display:"flex",gap:condensedChat?6:10,alignItems:"flex-start",padding:condensedChat?"2px 6px":"3px 6px",borderRadius:8,marginTop:showAvatar?10:0,position:"relative",
                         background:isHovered?"rgba(255,255,255,0.03)":"transparent"}}>
                     {isHovered&&!msg.deleted&&(
@@ -2106,7 +2172,7 @@ export default function ChatPage() {
                   <textarea value={dmNoteText} onChange={e=>setDmNoteText(e.target.value)} placeholder="Kirjoita muistiinpano..." rows={5}
                     style={{width:"100%",background:"var(--bg3)",border:"1px solid rgba(79,126,247,0.4)",borderRadius:8,padding:"8px 10px",color:"var(--text)",fontSize:12,fontFamily:"system-ui",resize:"none",outline:"none",boxSizing:"border-box"}}/>
                   <div style={{display:"flex",gap:6,marginTop:6}}>
-                    <button onClick={()=>{setDmNotes(prev=>({...prev,[activeDm.id]:dmNoteText}));setEditingDmNote(false)}}
+                    <button onClick={()=>{setDmNotes(prev=>{const next={...prev};const value=dmNoteText.trim();if(value)next[activeDm.id]=value;else delete next[activeDm.id];return next});setEditingDmNote(false)}}
                       style={{flex:1,padding:"6px",background:"#4f7ef7",border:"none",borderRadius:6,color:"#fff",fontSize:12,cursor:"pointer",fontFamily:"system-ui"}}>Tallenna</button>
                     <button onClick={()=>setEditingDmNote(false)}
                       style={{padding:"6px 10px",background:"transparent",border:"1px solid var(--border2)",borderRadius:6,color:"var(--text2)",fontSize:12,cursor:"pointer",fontFamily:"system-ui"}}>Peruuta</button>
@@ -2183,10 +2249,11 @@ export default function ChatPage() {
             {contextReactionEmojis.map(e=><button key={e} onClick={()=>{toggleReaction(contextMenu.msg,e);setContextMenu(null)}} style={{fontSize:18,padding:"3px 5px",cursor:"pointer",border:"none",background:"transparent",borderRadius:6}}>{e}</button>)}
             <button onClick={(e)=>{openReactionPicker(contextMenu.msg, e.currentTarget.getBoundingClientRect());setContextMenu(null)}} style={{fontSize:18,padding:"3px 7px",cursor:"pointer",border:"none",background:"transparent",borderRadius:6,color:"var(--text2)"}} title="Lisää reaktio">＋</button>
           </div>
-          <div style={{height:"1px",background:"var(--border)",margin:"4px 0"}}/>
+          <div style={ctxDivider}/>
           <div onClick={()=>{setReplyTo(contextMenu.msg);setContextMenu(null)}} style={ctxItem}>↩ Vastaa</div>
           <div onClick={()=>copyMessageText(contextMenu.msg)} style={ctxItem}>📋 Kopioi teksti</div>
           <div onClick={()=>openForwardModal(contextMenu.msg)} style={ctxItem}>📨 Lähetä uudelleen viesti</div>
+          <div style={ctxDivider}/>
           <div onClick={()=>togglePinMessage(contextMenu.msg)} style={ctxItem}>{contextMenu.msg.pinned ? "📌 Poista kiinnitys" : "📌 Kiinnitä"}</div>
           {contextMenu.msg.senderId===user.uid&&!contextMenu.msg.deleted&&(
             <div onClick={()=>{setEditingMsg(contextMenu.msg);setEditText(contextMenu.msg.text);setContextMenu(null)}} style={ctxItem}>✏️ Muokkaa</div>
@@ -2196,13 +2263,14 @@ export default function ChatPage() {
               🗑️ Poista
             </div>
           )}
+          <div style={ctxDivider}/>
           <div onClick={()=>{const u2=allUsers.find(u=>u.id===contextMenu.msg.senderId);if(u2){setProfileModal(u2);setContextMenu(null)}}} style={ctxItem}>👤 Profiili</div>
+          <div onClick={()=>reportMessage(contextMenu.msg)} style={{...ctxItem,color:"var(--text2)"}}>🚩 Raportoi</div>
           {activeChannel&&(<>
-            <div style={{height:"1px",background:"var(--border)",margin:"4px 0"}}/>
+            <div style={ctxDivider}/>
             <div style={{padding:"4px 10px 2px",fontSize:10,color:"var(--text3)"}}>Mykistä kanava</div>
             {[15,60,480,1440].map(m=><div key={m} onClick={()=>muteChannel(activeChannel.id,m)} style={ctxItem}>🔕 {m<60?m+" min":m<1440?m/60+" t":"24 t"}</div>)}
           </>)}
-          <div onClick={()=>reportMessage(contextMenu.msg)} style={{...ctxItem,color:"var(--text2)"}}>🚩 Raportoi</div>
         </div>
       )}
 
@@ -2236,7 +2304,7 @@ export default function ChatPage() {
             <div onClick={()=>togglePin(sidebarCtxMenu.item.id)} style={ctxItem}>
               {pinnedItems[sidebarCtxMenu.item.id]?"📌 Poista kiinnitys":"📌 Kiinnitä kanava"}
             </div>
-            <div style={{height:"1px",background:"var(--border)",margin:"4px 0"}}/>
+            <div style={ctxDivider}/>
             <div style={{padding:"4px 10px 2px",fontSize:10,color:"var(--text3)"}}>Mykistä</div>
             {[15,60,480,1440].map(m=>(
               <div key={m} onClick={()=>{setMutedChannels(prev=>({...prev,[sidebarCtxMenu.item.id]:Date.now()+m*60000}));pushNotif("info",`Mykistetty ${m<60?m+" min":m<1440?m/60+" t":"24 t"}`);setSidebarCtxMenu(null)}} style={ctxItem}>
@@ -2246,12 +2314,12 @@ export default function ChatPage() {
             {isChannelMuted(sidebarCtxMenu.item.id)&&(
               <div onClick={()=>{setMutedChannels(prev=>{const n={...prev};delete n[sidebarCtxMenu.item.id];return n});setSidebarCtxMenu(null)}} style={ctxItem}>🔔 Poista mykistys</div>
             )}
-            <div style={{height:"1px",background:"var(--border)",margin:"4px 0"}}/>
+            <div style={ctxDivider}/>
             <div onClick={()=>{selectChannel(sidebarCtxMenu.item);setShowChannelInfo(true);setSidebarCtxMenu(null)}} style={ctxItem}>ℹ️ Kanavan tiedot</div>
             <div onClick={()=>reportSidebarItem(sidebarCtxMenu.item,"channel_report")} style={{...ctxItem,color:"var(--text2)"}}>🚩 Raportoi kanava</div>
             {sidebarCtxMenu.item.type==="private"&&sidebarCtxMenu.item.members?.includes(user.uid)&&(
               <>
-                <div style={{height:"1px",background:"var(--border)",margin:"4px 0"}}/>
+                <div style={ctxDivider}/>
                 <div onClick={()=>leaveChannel(sidebarCtxMenu.item)} style={{...ctxItem,color:"#f87171"}}>🚪 Poistu ryhmästä</div>
               </>
             )}
@@ -2260,9 +2328,9 @@ export default function ChatPage() {
           {/* --- MUISTIINPANOT --- */}
           {sidebarCtxMenu.type==="notes"&&(<>
             <div onClick={()=>{const me=allUsers.find(u=>u.id===user.uid)||{id:user.uid,displayName:"Muistiinpanot"};openDM(me);setSidebarCtxMenu(null)}} style={ctxItem}>📝 Avaa muistiinpanot</div>
-            <div style={{height:"1px",background:"var(--border)",margin:"4px 0"}}/>
+            <div style={ctxDivider}/>
             <div onClick={()=>{const me=allUsers.find(u=>u.id===user.uid)||profile;if(me)setProfileModal(me);setSidebarCtxMenu(null)}} style={ctxItem}>👤 Omat tiedot</div>
-            <div style={{height:"1px",background:"var(--border)",margin:"4px 0"}}/>
+            <div style={ctxDivider}/>
             <div onClick={()=>{const next=!hiddenNotes;setHiddenNotes(next);try{localStorage.setItem("hiddenNotes",String(next))}catch{};setSidebarCtxMenu(null)}} style={{...ctxItem,color:"var(--text3)"}}>
               {hiddenNotes?"👁 Näytä muistiinpanot":"🙈 Piilota muistiinpanot"}
             </div>
@@ -2273,7 +2341,7 @@ export default function ChatPage() {
             <div onClick={()=>togglePin(sidebarCtxMenu.item.id)} style={ctxItem}>
               {pinnedItems[sidebarCtxMenu.item.id]?"📌 Poista kiinnitys":"📌 Kiinnitä"}
             </div>
-            <div style={{height:"1px",background:"var(--border)",margin:"4px 0"}}/>
+            <div style={ctxDivider}/>
             <div style={{padding:"4px 10px 2px",fontSize:10,color:"var(--text3)"}}>Mykistä</div>
             {[15,60,480,1440].map(m=>(
               <div key={m} onClick={()=>{setMutedChannels(prev=>({...prev,[sidebarCtxMenu.dmId]:Date.now()+m*60000}));pushNotif("info",`Mykistetty ${m<60?m+" min":m<1440?m/60+" t":"24 t"}`);setSidebarCtxMenu(null)}} style={ctxItem}>
@@ -2283,10 +2351,10 @@ export default function ChatPage() {
             {isChannelMuted(sidebarCtxMenu.dmId)&&(
               <div onClick={()=>{setMutedChannels(prev=>{const n={...prev};delete n[sidebarCtxMenu.dmId];return n});setSidebarCtxMenu(null)}} style={ctxItem}>🔔 Poista mykistys</div>
             )}
-            <div style={{height:"1px",background:"var(--border)",margin:"4px 0"}}/>
+            <div style={ctxDivider}/>
             <div onClick={()=>{setProfileModal(sidebarCtxMenu.item);setSidebarCtxMenu(null)}} style={ctxItem}>👤 Jäsenen tiedot</div>
             <div onClick={()=>reportSidebarItem(sidebarCtxMenu.item,"dm_report")} style={{...ctxItem,color:"var(--text2)"}}>🚩 Raportoi käyttäjä</div>
-            <div style={{height:"1px",background:"var(--border)",margin:"4px 0"}}/>
+            <div style={ctxDivider}/>
             <div onClick={()=>hideDmUser(sidebarCtxMenu.item.id)} style={{...ctxItem,color:"var(--text3)"}}>🙈 Piilota keskustelu</div>
           </>)}
 
@@ -2295,7 +2363,7 @@ export default function ChatPage() {
             <div onClick={()=>togglePin(sidebarCtxMenu.item.id)} style={ctxItem}>
               {pinnedItems[sidebarCtxMenu.item.id]?"📌 Poista kiinnitys":"📌 Kiinnitä"}
             </div>
-            <div style={{height:"1px",background:"var(--border)",margin:"4px 0"}}/>
+            <div style={ctxDivider}/>
             <div onClick={()=>{openEquipmentChat(sidebarCtxMenu.item);setSidebarCtxMenu(null)}} style={ctxItem}>ℹ️ Varauksen tiedot</div>
           </>)}
         </div>
@@ -2767,3 +2835,4 @@ const inp       = {width:"100%",background:"var(--bg)",border:"1px solid var(--b
 const btnPrimary= {background:"#4f7ef7",border:"none",borderRadius:8,color:"#fff",padding:"8px 18px",cursor:"pointer",fontSize:13,fontWeight:500,fontFamily:"system-ui"}
 const btnGhost  = {background:"transparent",border:"1px solid var(--border2)",borderRadius:8,color:"var(--text2)",padding:"8px 18px",cursor:"pointer",fontSize:13,fontFamily:"system-ui"}
 const ctxItem   = {padding:"6px 10px",cursor:"pointer",fontSize:13,color:"var(--text)",borderRadius:6}
+const ctxDivider= {height:"1px",background:"var(--border)",margin:"4px 0"}
