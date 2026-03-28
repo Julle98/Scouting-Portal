@@ -1,6 +1,6 @@
 // src/pages/EquipmentPage.jsx
-import { useState, useEffect, useCallback } from "react"
-import { useNavigate } from "react-router-dom"
+import { useState, useEffect, useCallback, useRef } from "react"
+import { useLocation, useNavigate } from "react-router-dom"
 import { useAuth } from "../contexts/AuthContext"
 import { db } from "../services/firebase"
 import {
@@ -57,6 +57,7 @@ function statusLabel(res) {
 export default function EquipmentPage() {
   const { user, profile, isAdmin } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const isManager = isAdmin || profile?.role === "kalustovastaava" || profile?.roles?.includes("kalustovastaava")
 
   const [items, setItems]           = useState([])
@@ -69,8 +70,11 @@ export default function EquipmentPage() {
   const [myReservations, setMyReservations]   = useState([])
   const [showAdminPanel, setShowAdminPanel]   = useState(false)
   const [adminTab, setAdminTab]     = useState("pending") // pending | active | history
+  const [showHistoryModal, setShowHistoryModal] = useState(false)
+  const [debugUsersById, setDebugUsersById] = useState({})
   const [notification, setNotification] = useState(null)
   const [loadingItems, setLoadingItems] = useState(true)
+  const reservationsRef = useRef(null)
 
   const [form, setForm] = useState({
     name:"", category:"Teltat", quantity:1, location:"", description:"", condition:"Hyvä", emoji:"⛺"
@@ -123,6 +127,22 @@ export default function EquipmentPage() {
     })
     return () => unsubs.forEach(u => u())
   }, [items, user.uid])
+
+  useEffect(() => {
+    if (!isManager) {
+      setDebugUsersById({})
+      return
+    }
+
+    return onSnapshot(collection(db, "users"), snap => {
+      const next = {}
+      snap.docs.forEach(d => {
+        const data = d.data()
+        next[d.id] = Boolean(data?.isDebug)
+      })
+      setDebugUsersById(next)
+    })
+  }, [isManager])
 
   // ── Suodatus ────────────────────────────────────────────────────────────────
   const filtered = items.filter(i => {
@@ -281,6 +301,10 @@ export default function EquipmentPage() {
   const active   = allReservations.filter(r => r.status === "approved")
   const overdue  = allReservations.filter(r => r.status === "approved" && isOverdue(r))
   const history  = allReservations.filter(r => r.status === "returned" || r.status === "denied")
+  const visibleHistory = history.filter(r => {
+    if (isManager) return !debugUsersById[r.requesterId]
+    return r.requesterId === user.uid
+  })
 
   // Varaukset jotka näytetään kalusto-sivun alareunassa (kaikille näkyvät)
   const publicActive = allReservations.filter(r =>
@@ -290,10 +314,34 @@ export default function EquipmentPage() {
   // Näytetään kaikille varatut kalusteet
   const visibleReservations = isManager ? allReservations : publicActive
 
-  const adminTabItems = adminTab === "pending" ? pending : adminTab === "active" ? active : history
+  const adminTabItems = adminTab === "pending" ? pending : adminTab === "active" ? active : visibleHistory
 
   // ── Hakuvirhe ───────────────────────────────────────────────────────────────
   const noResults = search.trim() !== "" && filtered.length === 0
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const action = params.get("action")
+    if (!action) return
+
+    if (action === "new-equipment") {
+      if (isManager) setShowAdd(true)
+      else setShowHistoryModal(true)
+    } else if (action === "history") {
+      if (isManager) {
+        setShowAdminPanel(true)
+        setAdminTab("history")
+      } else {
+        setShowHistoryModal(true)
+      }
+    } else if (action === "active-reservations") {
+      setTimeout(() => {
+        reservationsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+      }, 0)
+    }
+
+    navigate(location.pathname, { replace: true })
+  }, [location.search, location.pathname, isManager])
 
   // ── RENDER ──────────────────────────────────────────────────────────────────
   return (
@@ -315,8 +363,13 @@ export default function EquipmentPage() {
             📬 {pending.length} pyyntöä
           </button>
         )}
-        {isManager && (
-          <button onClick={() => setShowAdd(true)} style={btnPrimary}>+ Lisää kalusto</button>
+        {isManager ? (
+          <>
+            <button onClick={() => setShowAdd(true)} style={btnPrimary}>➕ Lisää kalustoa</button>
+            <button onClick={() => { setShowAdminPanel(true); setAdminTab("history") }} style={btnGhost}>📁 Kalustohistoria</button>
+          </>
+        ) : (
+          <button onClick={() => setShowHistoryModal(true)} style={btnGhost}>📁 Kalustohistoria</button>
         )}
       </div>
 
@@ -421,7 +474,7 @@ export default function EquipmentPage() {
 
         {/* ── Varatut kalusteet -osio ──────────────────────────────────────────── */}
         {visibleReservations.filter(r => r.status !== "returned" && r.status !== "denied").length > 0 && (
-          <div style={{ marginTop:16 }}>
+          <div ref={reservationsRef} style={{ marginTop:16 }}>
             <div style={{ fontSize:13, fontWeight:600, color:"var(--text3)", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:14, display:"flex", alignItems:"center", gap:8 }}>
               <span>📋 {isManager ? "Kaikki varaukset" : "Varatut kalusteet"}</span>
             </div>
@@ -584,7 +637,7 @@ export default function EquipmentPage() {
               {[
                 { id:"pending", label:`📬 Odottavat`, count:pending.length },
                 { id:"active",  label:`✅ Aktiiviset`, count:active.length },
-                { id:"history", label:`📁 Historia`,  count:history.length },
+                { id:"history", label:`📁 Historia`,  count:visibleHistory.length },
               ].map(t => (
                 <button key={t.id} onClick={() => setAdminTab(t.id)}
                   style={{
@@ -632,6 +685,44 @@ export default function EquipmentPage() {
             })}
 
             <button onClick={() => setShowAdminPanel(false)} style={{ ...btnGhost, marginTop:8, width:"100%" }}>Sulje</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Kalustohistoria (kaikille) ─────────────────────────────────────── */}
+      {showHistoryModal && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:120 }} onClick={() => setShowHistoryModal(false)}>
+          <div style={{ background:"var(--bg2)", border:"1px solid var(--border2)", borderRadius:16, padding:24, width:560, maxWidth:"94vw", maxHeight:"85vh", overflowY:"auto" }} onClick={e => e.stopPropagation()}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
+              <span style={{ fontWeight:700, fontSize:16 }}>📁 Kalustohistoria</span>
+              <button onClick={() => setShowHistoryModal(false)} style={{ background:"transparent", border:"none", color:"var(--text2)", cursor:"pointer", fontSize:18 }}>✕</button>
+            </div>
+
+            {visibleHistory.length === 0 && (
+              <p style={{ color:"var(--text3)", textAlign:"center", padding:"24px 0" }}>Ei historiatietoja.</p>
+            )}
+
+            {visibleHistory.map(r => {
+              const sl = statusLabel(r)
+              return (
+                <div key={r.id} style={{ background:"var(--bg3)", border:"1px solid rgba(255,255,255,0.06)", borderRadius:10, padding:"12px 14px", marginBottom:10 }}>
+                  <div style={{ display:"flex", alignItems:"flex-start", gap:12 }}>
+                    <span style={{ fontSize:24, flexShrink:0 }}>{r.itemEmoji || "📦"}</span>
+                    <div style={{ flex:1 }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom:4 }}>
+                        <span style={{ fontWeight:600, fontSize:14 }}>{r.itemName}</span>
+                        <span style={{ fontSize:11 }}>×{r.quantity}</span>
+                        <span style={{ fontSize:11, padding:"2px 8px", borderRadius:5, background:sl.bg, color:sl.color, fontWeight:500 }}>{sl.text}</span>
+                      </div>
+                      <div style={{ fontSize:12, color:"var(--text2)", marginBottom:2 }}>👤 {r.requesterName}</div>
+                      <div style={{ fontSize:11, color:"var(--text3)" }}>📅 {r.startDate} – {r.endDate}</div>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+
+            <button onClick={() => setShowHistoryModal(false)} style={{ ...btnGhost, marginTop:8, width:"100%" }}>Sulje</button>
           </div>
         </div>
       )}

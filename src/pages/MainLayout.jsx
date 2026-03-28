@@ -1,6 +1,6 @@
 // src/pages/MainLayout.jsx
 import { useEffect, useRef, useState } from "react"
-import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom"
+import { Routes, Route, useNavigate, useLocation } from "react-router-dom"
 import { useAuth } from "../contexts/AuthContext"
 import { db } from "../services/firebase"
 import { doc, updateDoc, serverTimestamp, collection, onSnapshot, getDoc, query, orderBy, limit } from "firebase/firestore"
@@ -11,6 +11,7 @@ import ProfilePage from "./ProfilePage"
 import AdminPage from "./AdminPage"
 import MeetingsPage from "./MeetingsPage"
 import SettingsPage from "./SettingsPage"
+import HomePage from "./HomePage"
 
 const VERSION = import.meta.env.VITE_VERSION 
 const TOAST_VISIBLE_MS = 5000
@@ -25,6 +26,7 @@ const NAV = [
 ]
 
 const PAGE_LABELS = {
+  "/":         "Etusivu",
   "/chat":      "Chat",
   "/kalusto":  "Kalusto",
   "/johtajat": "Johtajat",
@@ -82,6 +84,8 @@ export default function MainLayout() {
   const [toasts, setToasts]         = useState([])
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [showTerms, setShowTerms]   = useState(null) // "terms" | "privacy"
+  const [ctxMenu, setCtxMenu] = useState({ open:false, x:0, y:0 })
+  const [allowNativeContextOnce, setAllowNativeContextOnce] = useState(false)
   const [inviteEmail, setInviteEmail] = useState("")
   const [chatHasBadge, setChatHasBadge] = useState(localStorage.getItem("chatAlert") === "1")
   const [chatUnreadCount, setChatUnreadCount] = useState(Number(localStorage.getItem("chatUnreadTotal") || "0") || 0)
@@ -444,8 +448,97 @@ export default function MainLayout() {
     setTimeout(() => logout(), 1200)
   }
 
+  function closeContextMenu() {
+    setCtxMenu(prev => (prev.open ? { ...prev, open:false } : prev))
+  }
+
+  function openContextMenuAt(x, y) {
+    const vw = window.innerWidth
+    const vh = window.innerHeight
+    const menuW = 240
+    const menuH = onChatPage ? 560 : onEquipmentPage ? 520 : 420
+    const margin = 8
+    const safeX = Math.min(x, Math.max(8, vw - menuW - 8))
+    const spaceBelow = vh - y - margin
+    const spaceAbove = y - margin
+    let safeY = y
+
+    if (spaceBelow < menuH && spaceAbove >= menuH) {
+      safeY = y - menuH
+    } else {
+      safeY = Math.min(y, Math.max(margin, vh - menuH - margin))
+    }
+
+    safeY = Math.max(margin, safeY)
+    setCtxMenu({ open:true, x:safeX, y:safeY })
+  }
+
+  function openContextMenu(e) {
+    if (allowNativeContextOnce) {
+      setAllowNativeContextOnce(false)
+      closeContextMenu()
+      return
+    }
+    e.preventDefault()
+    openContextMenuAt(e.clientX, e.clientY)
+  }
+
+  async function handleReportIssue() {
+    const details = window.prompt("Kuvaile ongelma lyhyesti")
+    if (!details || !details.trim()) {
+      closeContextMenu()
+      return
+    }
+
+    try {
+      const { addDoc, collection, serverTimestamp: st } = await import("firebase/firestore")
+      await addDoc(collection(db, "reports"), {
+        message: details.trim(),
+        page: location.pathname,
+        unreadAtReport: chatUnreadCount,
+        createdBy: user?.uid || null,
+        createdByName: profile?.displayName || "Tuntematon",
+        createdAt: st(),
+        status: "open",
+      })
+      pushToast("Raportti lähetetty. Kiitos!", "success")
+    } catch {
+      pushToast("Raportin lähetys epäonnistui", "error")
+    } finally {
+      closeContextMenu()
+    }
+  }
+
+  useEffect(() => {
+    const onEscape = (e) => {
+      if (e.key === "Escape") closeContextMenu()
+    }
+    window.addEventListener("keydown", onEscape)
+    return () => window.removeEventListener("keydown", onEscape)
+  }, [])
+
+  useEffect(() => {
+    const openFromChildMenu = (e) => {
+      const x = Number(e?.detail?.x)
+      const y = Number(e?.detail?.y)
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return
+      openContextMenuAt(x, y)
+    }
+
+    window.addEventListener("openGlobalContextMenu", openFromChildMenu)
+    return () => window.removeEventListener("openGlobalContextMenu", openFromChildMenu)
+  }, [])
+
   const onlineCount = allUsers.filter(u => u.online).length
   const totalCount  = allUsers.length
+  const onChatPage = location.pathname.startsWith("/chat")
+  const onEquipmentPage = location.pathname.startsWith("/kalusto")
+  const isEquipmentManager = isAdmin || profile?.role === "kalustovastaava" || profile?.roles?.includes("kalustovastaava")
+
+  function goWithAction(path, action) {
+    navigate(`${path}?action=${encodeURIComponent(action)}`)
+    closeContextMenu()
+  }
 
   function isActive(path) {
     if (path === "/chat") return location.pathname.startsWith("/chat")
@@ -460,7 +553,11 @@ export default function MainLayout() {
   const bottomBtn = { display:"flex", alignItems:"center", gap:9, padding:"7px 10px", borderRadius:8, cursor:"pointer", fontSize:12, fontWeight:500, fontFamily:"system-ui", border:"none", background:"var(--bg3)", color:"var(--text2)", width:"100%", textAlign:"left" }
 
   return (
-    <div style={{ display:"flex", height:"100vh", background:"var(--bg)", color:"var(--text)", fontFamily:"system-ui,sans-serif", overflow:"hidden" }}>
+    <div
+      onContextMenu={openContextMenu}
+      onClick={closeContextMenu}
+      style={{ display:"flex", height:"100vh", background:"var(--bg)", color:"var(--text)", fontFamily:"system-ui,sans-serif", overflow:"hidden" }}
+    >
 
       {/* Sidebar */}
       <div style={{ width:220, background:"var(--bg2)", borderRight:"1px solid var(--border)", display:"flex", flexDirection:"column", flexShrink:0 }}>
@@ -468,8 +565,8 @@ export default function MainLayout() {
         {/* Logo */}
         <div style={{ padding:"16px 16px 12px", borderBottom:"1px solid var(--border)" }}>
           <div
-            onClick={() => navigate("/chat")}
-            title="Siirry chattiin"
+            onClick={() => navigate("/")}
+            title="Siirry etusivulle"
             style={{ display:"flex", alignItems:"center", gap:10, cursor:"pointer" }}
           >
             <div style={{ width:36, height:36, background:"var(--bg3)", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, overflow:"hidden", border:"1px solid var(--border)" }}>
@@ -553,7 +650,7 @@ export default function MainLayout() {
       {/* Sisältöalue */}
             <div style={{ flex:1, display:"flex", flexDirection:"column", minWidth:0, overflow:"hidden" }}>
               <Routes>
-                <Route path="/"         element={<Navigate to="/chat" replace />} />
+                <Route path="/"         element={<HomePage />} />
                 <Route path="/chat"     element={<ChatPage />} />
                 <Route path="/chat/:chatType" element={<ChatPage />} />
                 <Route path="/chat/:chatType/:chatTarget" element={<ChatPage />} />
@@ -655,7 +752,88 @@ export default function MainLayout() {
         </div>
       )}
 
+      {ctxMenu.open && (
+        <div
+          onClick={e => e.stopPropagation()}
+          style={{
+            position:"fixed",
+            left:ctxMenu.x,
+            top:ctxMenu.y,
+            width:240,
+            maxHeight:"calc(100vh - 16px)",
+            overflowY:"auto",
+            background:"var(--bg2)",
+            border:"1px solid var(--border2)",
+            borderRadius:10,
+            boxShadow:"0 14px 30px rgba(0,0,0,0.35)",
+            padding:6,
+            zIndex:500,
+          }}
+        >
+          {onChatPage && (
+            <>
+              <div style={{ padding:"4px 10px 2px", fontSize:10, color:"var(--text3)", textTransform:"uppercase", letterSpacing:"0.07em" }}>Chat pika-toiminnot</div>
+              <button onClick={() => goWithAction("/chat", "new-channel")} style={ctxBtn}>➕ Uusi kanava</button>
+              <button onClick={() => goWithAction("/chat", "new-dm")} style={ctxBtn}>👤 Uusi yksityiskeskustelu</button>
+              <button onClick={() => goWithAction("/chat", "equipment-reservations")} style={ctxBtn}>🎒 Kalustovaraukset</button>
+              <button onClick={() => goWithAction("/chat", "unread")} style={ctxBtn}>📨 Lukemattomat viestit</button>
+              <div style={{ height:1, background:"var(--border)", margin:"4px 4px" }} />
+            </>
+          )}
+
+          <div style={{ padding:"4px 10px 2px", fontSize:10, color:"var(--text3)", textTransform:"uppercase", letterSpacing:"0.07em" }}>Siirry</div>
+          <button onClick={() => { navigate("/"); closeContextMenu() }} style={ctxBtn}>🏠 Siirry: Etusivu</button>
+          <button onClick={() => { navigate("/chat"); closeContextMenu() }} style={ctxBtn}>💬 Siirry: Chat</button>
+          <button onClick={() => { navigate("/kalusto"); closeContextMenu() }} style={ctxBtn}>🎒 Siirry: Kalusto</button>
+          <button onClick={() => { navigate("/johtajat"); closeContextMenu() }} style={ctxBtn}>👥 Siirry: Johtajat</button>
+          <button onClick={() => { navigate("/kokousvuorot"); closeContextMenu() }} style={ctxBtn}>📅 Siirry: Kokousvuorot</button>
+          <button onClick={() => { navigate("/profiili"); closeContextMenu() }} style={ctxBtn}>👤 Siirry: Profiili</button>
+          <button onClick={() => { navigate("/asetukset"); closeContextMenu() }} style={ctxBtn}>⚙️ Siirry: Asetukset</button>
+          <div style={{ height:1, background:"var(--border)", margin:"4px 4px" }} />
+
+          {onEquipmentPage && (
+            <>
+              <div style={{ padding:"4px 10px 2px", fontSize:10, color:"var(--text3)", textTransform:"uppercase", letterSpacing:"0.07em" }}>Kalusto pika-toiminnot</div>
+              {isEquipmentManager && (
+                <button onClick={() => goWithAction("/kalusto", "new-equipment")} style={ctxBtn}>➕ Uusi kalusto</button>
+              )}
+              <button onClick={() => goWithAction("/kalusto", "history")} style={ctxBtn}>🗂️ Kalusto historia</button>
+              <button onClick={() => goWithAction("/kalusto", "active-reservations")} style={ctxBtn}>📋 Meneillään olevat varaukset</button>
+              <div style={{ height:1, background:"var(--border)", margin:"4px 4px" }} />
+            </>
+          )}
+
+          <button onClick={() => { navigate("/chat"); closeContextMenu() }} style={ctxBtn}>
+            🔔 Lukemattomat viestit: {chatUnreadCount > 99 ? "99+" : chatUnreadCount}
+          </button>
+          <button
+            onClick={() => {
+              setAllowNativeContextOnce(true)
+              pushToast("Seuraava oikea klikkaus avaa selaimen vakio valikon", "info")
+              closeContextMenu()
+            }}
+            style={ctxBtn}
+          >
+            🧭 Avaa selaimen vakio valikko
+          </button>
+          <button onClick={handleReportIssue} style={{ ...ctxBtn, color:"#fca5a5" }}>🚩 Raportoi ongelma</button>
+        </div>
+      )}
+
       <style>{`@keyframes toastIn { from { opacity:0; transform:translateY(12px) } to { opacity:1; transform:translateY(0) } } @keyframes toastOut { from { opacity:1; transform:translateY(0) } to { opacity:0; transform:translateY(8px) } }`}</style>
     </div>
   )
+}
+
+const ctxBtn = {
+  width:"100%",
+  textAlign:"left",
+  border:"none",
+  background:"transparent",
+  color:"var(--text)",
+  borderRadius:7,
+  padding:"8px 10px",
+  fontSize:13,
+  cursor:"pointer",
+  fontFamily:"system-ui",
 }

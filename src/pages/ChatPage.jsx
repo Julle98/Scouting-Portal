@@ -155,6 +155,51 @@ export default function ChatPage() {
   const lastTypingWriteRef = useRef(0)
   const { pending: linkPending, open: openLink, close: closeLink } = useLinkWarning()
 
+  function openFirstUnreadConversation() {
+    const unreadChannel = channels.find(ch => (channelBadges[ch.id]?.unread || 0) > 0)
+    if (unreadChannel) {
+      selectChannel(unreadChannel)
+      return true
+    }
+
+    const unreadDmUser = allUsers.find(u2 => {
+      if (u2.id === user.uid || hiddenDmUsers[u2.id]) return false
+      const dmId = [user.uid, u2.id].sort().join("_")
+      return (dmBadges[dmId]?.unread || 0) > 0
+    })
+    if (unreadDmUser) {
+      openDM(unreadDmUser)
+      return true
+    }
+
+    const unreadEquipment = equipmentChats.find(chat => (equipmentBadges[chat.id]?.unread || 0) > 0)
+    if (unreadEquipment) {
+      openEquipmentChat(unreadEquipment)
+      return true
+    }
+
+    return false
+  }
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const action = params.get("action")
+    if (!action) return
+
+    if (action === "new-channel") {
+      setShowNewChannel(true)
+    } else if (action === "new-dm") {
+      setShowNewDM(true)
+    } else if (action === "equipment-reservations") {
+      setShowEquipmentChatPicker(true)
+    } else if (action === "unread") {
+      const found = openFirstUnreadConversation()
+      if (!found) pushNotif("info", "Ei lukemattomia viestejä")
+    }
+
+    navigate(location.pathname, { replace: true })
+  }, [location.search, location.pathname, channels, allUsers, equipmentChats, channelBadges, dmBadges, equipmentBadges, hiddenDmUsers])
+
   let storage = null
   try { storage = getStorage(getApp()) } catch {}
 
@@ -727,6 +772,12 @@ export default function ChatPage() {
     const estimatedHeight = estimatedHeights[payload?.type] || 220
     const pos = resolveMenuPosition(e.clientX, e.clientY, estimatedHeight, 240)
     setSidebarCtxMenu({ ...pos, ...payload })
+  }
+
+  function openGlobalMenuFromChat(x, y) {
+    setContextMenu(null)
+    setSidebarCtxMenu(null)
+    window.dispatchEvent(new CustomEvent("openGlobalContextMenu", { detail: { x, y } }))
   }
 
   async function sendMessage(gifUrl=pendingGif?.url||null, gifPreview=pendingGif?.preview||null) {
@@ -2245,6 +2296,8 @@ export default function ChatPage() {
       {contextMenu&&(
         <div style={{position:"fixed",left:contextMenu.x,top:contextMenu.y,background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:10,padding:6,zIndex:100,minWidth:170,boxShadow:"0 8px 32px rgba(0,0,0,0.6)"}}
           onClick={e=>e.stopPropagation()}>
+          <div onClick={()=>openGlobalMenuFromChat(contextMenu.x, contextMenu.y)} style={ctxItem}>➡️ Siirry...</div>
+          <div style={ctxDivider}/>
           <div style={{display:"flex",flexWrap:"wrap",gap:2,marginBottom:4}}>
             {contextReactionEmojis.map(e=><button key={e} onClick={()=>{toggleReaction(contextMenu.msg,e);setContextMenu(null)}} style={{fontSize:18,padding:"3px 5px",cursor:"pointer",border:"none",background:"transparent",borderRadius:6}}>{e}</button>)}
             <button onClick={(e)=>{openReactionPicker(contextMenu.msg, e.currentTarget.getBoundingClientRect());setContextMenu(null)}} style={{fontSize:18,padding:"3px 7px",cursor:"pointer",border:"none",background:"transparent",borderRadius:6,color:"var(--text2)"}} title="Lisää reaktio">＋</button>
@@ -2299,6 +2352,8 @@ export default function ChatPage() {
       {sidebarCtxMenu&&(
         <div style={{position:"fixed",left:sidebarCtxMenu.x,top:sidebarCtxMenu.y,background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:10,padding:6,zIndex:100,minWidth:190,boxShadow:"0 8px 32px rgba(0,0,0,0.6)"}}
           onClick={e=>e.stopPropagation()}>
+          <div onClick={()=>openGlobalMenuFromChat(sidebarCtxMenu.x, sidebarCtxMenu.y)} style={ctxItem}>➡️ Siirry...</div>
+          <div style={ctxDivider}/>
           {/* --- KANAVA --- */}
           {sidebarCtxMenu.type==="channel"&&(<>
             <div onClick={()=>togglePin(sidebarCtxMenu.item.id)} style={ctxItem}>
