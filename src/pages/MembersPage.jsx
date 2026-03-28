@@ -41,6 +41,7 @@ export default function MembersPage() {
   }, [])
 
   async function openDM(target) {
+    let nextPath = "/"
     if (target.id === user.uid) {
       const dmId = user.uid + "_" + user.uid
       const ref = doc(db, "directMessages", dmId)
@@ -48,6 +49,7 @@ export default function MembersPage() {
       if (!snap.exists()) {
         await setDoc(ref, { participants:[user.uid,user.uid], lastMessageAt:serverTimestamp(), lastMessage:"", isSelfNote:true })
       }
+      nextPath = "/chat/notes"
     } else {
       const dmId = [user.uid, target.id].sort().join("_")
       const ref = doc(db, "directMessages", dmId)
@@ -55,8 +57,9 @@ export default function MembersPage() {
       if (!snap.exists()) {
         await setDoc(ref, { participants:[user.uid,target.id], lastMessageAt:serverTimestamp(), lastMessage:"" })
       }
+      nextPath = `/chat/dm/${target.id}`
     }
-    navigate("/")
+    navigate(nextPath)
   }
 
   function getUserRoles(m) {

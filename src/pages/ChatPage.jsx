@@ -1032,6 +1032,10 @@ export default function ChatPage() {
     const ref2 = doc(db,"directMessages",dmId)
     const snap = await getDoc(ref2)
     if (!snap.exists()) await setDoc(ref2,{participants:isSelf?[user.uid,user.uid]:[user.uid,targetUser.id],lastMessageAt:serverTimestamp(),lastMessage:"",isSelfNote:isSelf})
+    if (isSelf && hiddenNotes) {
+      setHiddenNotes(false)
+      try { localStorage.setItem("hiddenNotes", "false") } catch {}
+    }
     if (!isSelf && hiddenDmUsers[targetUser.id]) {
       setHiddenDmUsers(prev => {
         const next = { ...prev }
@@ -1444,15 +1448,7 @@ export default function ChatPage() {
             </div>
 
             {/* Muistiinpanot */}
-            {hiddenNotes ? (
-              <div
-                onContextMenu={e=>{e.preventDefault();e.stopPropagation();setSidebarCtxMenu({x:e.clientX,y:e.clientY,type:"notes"})}}
-                title="Muistiinpanot (piilotettu) — oikeaklikkaa"
-                style={{padding:"4px 12px",cursor:"default",fontSize:11,borderRadius:6,margin:"1px 4px",display:"flex",alignItems:"center",gap:7,color:"var(--text3)",opacity:0.35,userSelect:"none"}}>
-                <span style={{fontSize:14,flexShrink:0}}>📝</span>
-                <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>···</span>
-              </div>
-            ) : (
+            {!hiddenNotes && (
               <div onClick={()=>{const me=allUsers.find(u=>u.id===user.uid)||{id:user.uid,displayName:"Muistiinpanot"};openDM(me)}}
                 onContextMenu={e=>{e.preventDefault();e.stopPropagation();setSidebarCtxMenu({x:e.clientX,y:e.clientY,type:"notes"})}}
                 style={{padding:"5px 12px",cursor:"pointer",fontSize:13,borderRadius:6,margin:"1px 4px",display:"flex",alignItems:"center",gap:7,
@@ -2321,7 +2317,10 @@ export default function ChatPage() {
             {profileModal.phone&&<div style={{fontSize:13,color:"var(--text3)",marginBottom:14}}>📞 {profileModal.phone}</div>}
             <div style={{display:"flex",gap:8,justifyContent:"center"}}>
               <button onClick={()=>setProfileModal(null)} style={btnGhost}>Sulje</button>
-              {profileModal.id!==user.uid&&<button onClick={()=>{openDM(profileModal);setProfileModal(null)}} style={btnPrimary}>💬 Lähetä viesti</button>}
+              {profileModal.id===user.uid
+                ? <button onClick={()=>{openDM(profileModal);setProfileModal(null)}} style={btnPrimary}>📝 Avaa muistiinpanot</button>
+                : <button onClick={()=>{openDM(profileModal);setProfileModal(null)}} style={btnPrimary}>💬 Lähetä viesti</button>
+              }
             </div>
           </div>
         </div>
