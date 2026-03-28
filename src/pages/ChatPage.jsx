@@ -6,20 +6,34 @@ import { db } from "../services/firebase"
 import {
   collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot,
   query, orderBy, limit, serverTimestamp, arrayUnion, arrayRemove,
-  setDoc, getDoc, where
+  setDoc, getDoc, getDocs, where
 } from "firebase/firestore"
 import { approveReservation, denyReservation, markReturned } from "../services/equipmentService"
 import { getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL } from "firebase/storage"
 import { getApp } from "firebase/app"
+import EmojiPicker from "emoji-picker-react"
 import { Avatar } from "../components/ui/Avatar"
 import { useLinkWarning, LinkWarningModal, TextWithLinks } from "../components/ui/LinkWarning"
 
-const EMOJIS = ["😀","😂","🥰","😎","🤔","😅","🙏","👍","👎","❤️","🔥","✅","⚠️","🎉","🏕️","⛺","🧭","🎒","🍳","💪","🤝","👏","😴","🤣","😤","🫡","🌟","💯","🆗","🆒"]
 const GIPHY_KEY = import.meta.env.VITE_GIPHY_API_KEY;
 const QUICK_REACTIONS = ["👍","❤️","😂","🔥","🎉","😎"]
+const FREQUENT_EMOJIS_STORAGE_KEY = "chatFrequentEmojis"
+const QUICK_REACTION_COUNT = 6
+const REACTION_PICKER_WIDTH = 360
+const REACTION_PICKER_HEIGHT = 420
 const MAX_MSG_LENGTH = 1000
 const TYPING_TIMEOUT_MS = 5000
 const TYPING_WRITE_INTERVAL_MS = 1500
+
+function loadFrequentEmojis() {
+  try {
+    const raw = localStorage.getItem(FREQUENT_EMOJIS_STORAGE_KEY)
+    const parsed = raw ? JSON.parse(raw) : {}
+    return parsed && typeof parsed === "object" ? parsed : {}
+  } catch {
+    return {}
+  }
+}
 
 function toChatSlug(value = "") {
   return String(value)
@@ -58,6 +72,9 @@ export default function ChatPage() {
   const [uploading, setUploading]     = useState(false)
   const [showAttach, setShowAttach]   = useState(false)
   const [showEmoji, setShowEmoji]     = useState(false)
+  const [showReactionEmojiPicker, setShowReactionEmojiPicker] = useState(false)
+  const [reactionPickerMsg, setReactionPickerMsg] = useState(null)
+  const [reactionPickerPos, setReactionPickerPos] = useState({ x: 0, y: 0 })
   const [showGif, setShowGif]         = useState(false)
   const [gifSearch, setGifSearch]     = useState("")
   const [gifResults, setGifResults]   = useState([])
@@ -71,17 +88,27 @@ export default function ChatPage() {
   const [showChannelInfo, setShowChannelInfo] = useState(false)
   const [newCh, setNewCh]             = useState({ name:"", type:"public", description:"" })
   const [editCh, setEditCh]           = useState({ name:"", description:"", slowMode:0 })
-  const [inviteEmail, setInviteEmail] = useState("")
-  const [inviteRole, setInviteRole]   = useState("johtaja")
+  const [inviteTargetUserId, setInviteTargetUserId] = useState("")
+  const [messageSearch, setMessageSearch] = useState("")
   const [allUsers, setAllUsers]       = useState([])
   const [showMembers, setShowMembers] = useState(true)
   const [showSidebar, setShowSidebar] = useState(true)
   const [modQueue, setModQueue]       = useState([])
   const [contextMenu, setContextMenu] = useState(null)
+  const [showPinnedMessages, setShowPinnedMessages] = useState(false)
+  const [pinnedMessages, setPinnedMessages] = useState([])
+  const [showForwardModal, setShowForwardModal] = useState(false)
+  const [forwardMsg, setForwardMsg] = useState(null)
+  const [forwardTargetType, setForwardTargetType] = useState("channel")
+  const [forwardTargetId, setForwardTargetId] = useState("")
   const [profileModal, setProfileModal] = useState(null)
   const [hoverMsg, setHoverMsg]       = useState(null)
   const [mutedChannels, setMutedChannels] = useState({})
   const [notifications, setNotifications] = useState([])
+  const [loadingChannels, setLoadingChannels] = useState(true)
+  const [loadingDmUsers, setLoadingDmUsers] = useState(true)
+  const [loadingEquipmentChats, setLoadingEquipmentChats] = useState(true)
+  const [loadingInviteStatuses, setLoadingInviteStatuses] = useState(false)
   // DM settings
   const [dmSettings, setDmSettings]   = useState(false)
   const [dmNotes, setDmNotes]         = useState({})
@@ -99,6 +126,7 @@ export default function ChatPage() {
   const [mentionQuery, setMentionQuery] = useState("")
   const [mentionIndex, setMentionIndex] = useState(0)
   const [mentionStart, setMentionStart] = useState(-1)
+  const [channelInviteSentMap, setChannelInviteSentMap] = useState({})
   const [condensedChat, setCondensedChat] = useState(localStorage.getItem("condensedChat") === "true")
   const [chatOrder, setChatOrder] = useState(localStorage.getItem("chatOrder") || "default")
   const [sidebarCtxMenu, setSidebarCtxMenu] = useState(null)
@@ -106,10 +134,11 @@ export default function ChatPage() {
   const [hiddenDmUsers, setHiddenDmUsers] = useState(() => { try { return JSON.parse(localStorage.getItem("hiddenDmUsers") || "{}") } catch { return {} } })
   const [sidebarWidth, setSidebarWidth] = useState(() => { const s = parseInt(localStorage.getItem("sidebarWidth")); return isNaN(s) ? 220 : Math.max(160, Math.min(480, s)) })
   const [hiddenNotes, setHiddenNotes] = useState(() => localStorage.getItem("hiddenNotes") === "true")
+  const [frequentEmojiUsage, setFrequentEmojiUsage] = useState(() => loadFrequentEmojis())
+  const [emojiPickerTheme, setEmojiPickerTheme] = useState("dark")
   const sidebarDragRef = useRef(false)
   const sidebarDragStartXRef = useRef(0)
   const sidebarDragStartWRef = useRef(0)
-
   const messagesEndRef = useRef(null)
   const gifSearchTimer = useRef(null)
   const fileInputRef   = useRef(null)
@@ -124,22 +153,27 @@ export default function ChatPage() {
 
   // Kanavat
   useEffect(() => {
+    setLoadingChannels(true)
     const q = query(collection(db, "channels"), orderBy("name"))
     return onSnapshot(q, snap => {
       const all = snap.docs.map(d => ({ id:d.id, ...d.data() }))
       setChannels(all.filter(ch => ch.type==="public" || ch.members?.includes(user.uid)))
       setActiveChannel(prev => prev ? (all.find(ch=>ch.id===prev.id)||null) : null)
+      setLoadingChannels(false)
     })
   }, [user.uid])
 
   // Käyttäjät
   useEffect(() => {
-    return onSnapshot(collection(db, "users"), snap =>
+    setLoadingDmUsers(true)
+    return onSnapshot(collection(db, "users"), snap => {
       setAllUsers(snap.docs.map(d => ({ id:d.id, ...d.data() })).filter(u => isAdmin || !u.isInvisible))
-    )
+      setLoadingDmUsers(false)
+    })
   }, [isAdmin])
 
   useEffect(() => {
+    setLoadingEquipmentChats(true)
     return onSnapshot(collection(db, "directMessages"), snap => {
       const chats = snap.docs
         .map(d => ({ id:d.id, ...d.data() }))
@@ -158,6 +192,7 @@ export default function ChatPage() {
           ? { ...prev, ...chats.find(chat => chat.id === prev.id), isEquipmentChat: true }
           : null
       })
+      setLoadingEquipmentChats(false)
     })
   }, [user.uid, isAdmin])
 
@@ -271,6 +306,25 @@ export default function ChatPage() {
     })
   }, [activeChannel?.id, activeDm?.id])
 
+  useEffect(() => {
+    if (!activeChannel && !activeDm) { setPinnedMessages([]); return }
+    const path = activeChannel
+      ? collection(db, "channels", activeChannel.id, "messages")
+      : collection(db, "directMessages", activeDm.id, "messages")
+    const q = query(path, orderBy("createdAt", "desc"), limit(500))
+    return onSnapshot(q, snap => {
+      const pinned = snap.docs
+        .map(d => ({ id:d.id, ...d.data() }))
+        .filter(m => m.pinned)
+        .sort((a, b) => {
+          const aMs = a.pinnedAt?.toMillis?.() || 0
+          const bMs = b.pinnedAt?.toMillis?.() || 0
+          return bMs - aMs
+        })
+      setPinnedMessages(pinned)
+    })
+  }, [activeChannel?.id, activeDm?.id])
+
   // Luetuksi merkintä
   useEffect(() => {
     if (!activeChannel && !activeDm) return
@@ -343,6 +397,34 @@ export default function ChatPage() {
     return () => {
       window.removeEventListener("chatSettingsChanged", onSettingsChange)
       window.removeEventListener("storage", onStorage)
+    }
+  }, [])
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)")
+
+    const resolveTheme = () => {
+      const saved = localStorage.getItem("theme") || "dark"
+      const resolved = saved === "auto" ? (media.matches ? "dark" : "light") : saved
+      setEmojiPickerTheme(resolved === "light" ? "light" : "dark")
+    }
+
+    resolveTheme()
+
+    const onThemeChanged = () => resolveTheme()
+    const onMediaChange = () => {
+      const saved = localStorage.getItem("theme") || "dark"
+      if (saved === "auto") resolveTheme()
+    }
+
+    window.addEventListener("themeChanged", onThemeChanged)
+    if (media.addEventListener) media.addEventListener("change", onMediaChange)
+    else media.addListener(onMediaChange)
+
+    return () => {
+      window.removeEventListener("themeChanged", onThemeChanged)
+      if (media.removeEventListener) media.removeEventListener("change", onMediaChange)
+      else media.removeListener(onMediaChange)
     }
   }, [])
 
@@ -529,6 +611,7 @@ export default function ChatPage() {
   }
 
   function appendEmoji(emoji) {
+    trackEmojiUsage(emoji)
     if (editingMsg) {
       setEditText(prev => `${prev}${emoji}`)
     } else {
@@ -536,6 +619,48 @@ export default function ChatPage() {
       pulseTypingIndicator(`${text}${emoji}`)
     }
     setShowEmoji(false)
+  }
+
+  function trackEmojiUsage(emoji) {
+    if (!emoji) return
+    setFrequentEmojiUsage(prev => {
+      const next = { ...prev, [emoji]: (prev[emoji] || 0) + 1 }
+      try { localStorage.setItem(FREQUENT_EMOJIS_STORAGE_KEY, JSON.stringify(next)) } catch {}
+      return next
+    })
+  }
+
+  function openReactionPicker(msg, anchorRect = null) {
+    if (!msg) return
+    const viewportW = window.innerWidth || 1280
+    const viewportH = window.innerHeight || 720
+    const fallbackX = Math.max(12, viewportW - REACTION_PICKER_WIDTH - 12)
+    const fallbackY = Math.max(12, viewportH - REACTION_PICKER_HEIGHT - 12)
+
+    const left = anchorRect
+      ? Math.min(Math.max(12, anchorRect.right - REACTION_PICKER_WIDTH), Math.max(12, viewportW - REACTION_PICKER_WIDTH - 12))
+      : fallbackX
+
+    let top = fallbackY
+    if (anchorRect) {
+      const aboveTop = anchorRect.top - REACTION_PICKER_HEIGHT - 8
+      const belowTop = anchorRect.bottom + 8
+      const maxTop = Math.max(12, viewportH - REACTION_PICKER_HEIGHT - 12)
+
+      if (aboveTop >= 12) {
+        top = aboveTop
+      } else if (belowTop <= maxTop) {
+        top = belowTop
+      } else {
+        top = Math.min(Math.max(12, belowTop), maxTop)
+      }
+    }
+
+    setReactionPickerPos({ x: left, y: top })
+    setReactionPickerMsg(msg)
+    setShowReactionEmojiPicker(true)
+    setShowEmoji(false)
+    setShowGif(false)
   }
 
   async function sendMessage(gifUrl=pendingGif?.url||null, gifPreview=pendingGif?.preview||null) {
@@ -592,14 +717,16 @@ export default function ChatPage() {
       ? doc(db,"channels",activeChannel.id,"messages",msg.id)
       : doc(db,"directMessages",activeDm.id,"messages",msg.id)
     const current = msg.reactions?.[emoji]||[]
+    const adding = !current.includes(user.uid)
     await updateDoc(path,{[`reactions.${emoji}`]:current.includes(user.uid)?arrayRemove(user.uid):arrayUnion(user.uid)})
+    if (adding) trackEmojiUsage(emoji)
   }
 
-  async function deleteMessage(msg) {
+  async function deleteMessage(msg, byModerator = false) {
     const path = activeChannel
       ? doc(db,"channels",activeChannel.id,"messages",msg.id)
       : doc(db,"directMessages",activeDm.id,"messages",msg.id)
-    await updateDoc(path,{deleted:true,text:""})
+    await updateDoc(path,{deleted:true,text:"",deletedByModerator:byModerator,deletedBy:byModerator?user.uid:null})
     setContextMenu(null)
   }
 
@@ -610,6 +737,97 @@ export default function ChatPage() {
     })
     setContextMenu(null)
     pushNotif("info","Viesti raportoitu","Moderointi")
+  }
+
+  async function copyMessageText(msg) {
+    const txt = (msg?.text || "").trim()
+    if (!txt) { pushNotif("info", "Viestissä ei ole kopioitavaa tekstiä"); return }
+    try {
+      await navigator.clipboard.writeText(txt)
+      pushNotif("success", "Teksti kopioitu")
+    } catch {
+      pushNotif("error", "Kopiointi epäonnistui")
+    }
+    setContextMenu(null)
+  }
+
+  function openForwardModal(msg) {
+    setForwardMsg(msg)
+    setForwardTargetType(activeChannel ? "channel" : "dm")
+    setForwardTargetId("")
+    setShowForwardModal(true)
+    setContextMenu(null)
+  }
+
+  async function forwardMessage() {
+    if (!forwardMsg || !forwardTargetId) return
+
+    const senderName = forwardMsg.senderName || "Tuntematon"
+    const baseText = (forwardMsg.text || "").trim()
+    const intro = `↪ Alkuperäinen lähettäjä: ${senderName}`
+    const forwardedText = baseText ? `${intro}\n${baseText}` : `${intro}\n[GIF / liite]`
+
+    const payload = {
+      text: forwardedText,
+      gifUrl: forwardMsg.gifUrl || null,
+      gifPreview: forwardMsg.gifPreview || null,
+      attachments: forwardMsg.attachments || [],
+      senderId: user.uid,
+      senderName: profile?.displayName || "Johtaja",
+      senderPhoto: profile?.photoURL || null,
+      replyTo: null,
+      createdAt: serverTimestamp(),
+      reactions: {},
+      deleted: false,
+      readBy: [user.uid],
+    }
+
+    if (forwardTargetType === "channel") {
+      await addDoc(collection(db, "channels", forwardTargetId, "messages"), payload)
+    } else {
+      const dmId = [user.uid, forwardTargetId].sort().join("_")
+      const dmRef = doc(db, "directMessages", dmId)
+      const dmSnap = await getDoc(dmRef)
+      if (!dmSnap.exists()) {
+        await setDoc(dmRef, {
+          participants: [user.uid, forwardTargetId],
+          lastMessageAt: serverTimestamp(),
+          lastMessage: "",
+          isSelfNote: false,
+        })
+      }
+      await addDoc(collection(db, "directMessages", dmId, "messages"), payload)
+      await updateDoc(dmRef, { lastMessage: forwardedText.slice(0, 120), lastMessageAt: serverTimestamp() })
+    }
+
+    setShowForwardModal(false)
+    setForwardMsg(null)
+    setForwardTargetId("")
+    pushNotif("success", "Viesti lähetetty uudelleen")
+  }
+
+  async function togglePinMessage(msg) {
+    const path = activeChannel
+      ? doc(db, "channels", activeChannel.id, "messages", msg.id)
+      : doc(db, "directMessages", activeDm.id, "messages", msg.id)
+    const isPinned = Boolean(msg.pinned)
+    await updateDoc(path, {
+      pinned: !isPinned,
+      pinnedAt: !isPinned ? serverTimestamp() : null,
+      pinnedBy: !isPinned ? user.uid : null,
+    })
+    pushNotif("info", !isPinned ? "Viesti kiinnitetty" : "Kiinnitys poistettu")
+    setContextMenu(null)
+  }
+
+  function jumpToMessage(messageId) {
+    if (!messageId) return
+    setShowPinnedMessages(false)
+    setTimeout(() => {
+      const el = document.getElementById(`msg-${messageId}`)
+      if (!el) return
+      el.scrollIntoView({ behavior: "smooth", block: "center" })
+    }, 40)
   }
 
   function togglePin(id) {
@@ -685,10 +903,127 @@ export default function ChatPage() {
   }
 
   async function sendInvite() {
-    if (!inviteEmail.trim()) return
-    await addDoc(collection(db,"invites"),{email:inviteEmail.trim().toLowerCase(),role:inviteRole,invitedBy:user.uid,invitedByName:profile?.displayName,used:false,createdAt:serverTimestamp()})
-    setInviteEmail(""); setShowInvite(false)
-    pushNotif("success","Kutsu lähetetty!")
+    if (!activeChannel || !isChannelAdmin || !inviteTargetUserId) return
+    const targetUser = allUsers.find(u => u.id === inviteTargetUserId)
+    if (!targetUser) return
+
+    const inviteKey = `${activeChannel.id}:${inviteTargetUserId}`
+    const alreadySent = channelInviteSentMap[inviteKey] || await hasPendingChannelInvite(activeChannel.id, inviteTargetUserId)
+    if (alreadySent) {
+      setChannelInviteSentMap(prev => ({ ...prev, [inviteKey]: true }))
+      pushNotif("info", `Kutsu on jo lähetetty käyttäjälle ${targetUser.displayName}`)
+      return
+    }
+
+    const dmId = [user.uid, inviteTargetUserId].sort().join("_")
+    const dmRef = doc(db, "directMessages", dmId)
+    const dmSnap = await getDoc(dmRef)
+    if (!dmSnap.exists()) {
+      await setDoc(dmRef, {
+        participants: [user.uid, inviteTargetUserId],
+        lastMessageAt: serverTimestamp(),
+        lastMessage: "",
+        isSelfNote: false,
+      })
+    }
+
+    const channelMemberCount = activeChannel.members?.length || 1
+    const inviteText = `Kutsun sinut ryhmään #${activeChannel.name}`
+
+    await addDoc(collection(db, "directMessages", dmId, "messages"), {
+      text: inviteText,
+      type: "channel_invite",
+      channelId: activeChannel.id,
+      channelName: activeChannel.name,
+      channelDescription: activeChannel.description || "",
+      channelMemberCount,
+      channelCreatedAt: activeChannel.createdAt || null,
+      invitedUserId: inviteTargetUserId,
+      invitedById: user.uid,
+      invitedByName: profile?.displayName || "Johtaja",
+      inviteAcceptedBy: [],
+      senderId: user.uid,
+      senderName: profile?.displayName || "Johtaja",
+      senderPhoto: profile?.photoURL || null,
+      createdAt: serverTimestamp(),
+      reactions: {},
+      deleted: false,
+      readBy: [user.uid],
+    })
+
+    await updateDoc(dmRef, {
+      lastMessage: `Ryhmäkutsu: #${activeChannel.name}`,
+      lastMessageAt: serverTimestamp(),
+    })
+
+    setChannelInviteSentMap(prev => ({
+      ...prev,
+      [inviteKey]: true,
+    }))
+
+    setInviteTargetUserId("")
+    setShowInvite(false)
+    pushNotif("success", `Kutsu lähetetty käyttäjälle ${targetUser.displayName}`)
+  }
+
+  async function hasPendingChannelInvite(channelId, targetUserId) {
+    if (!channelId || !targetUserId) return false
+    const dmId = [user.uid, targetUserId].sort().join("_")
+    try {
+      const inviteQuery = query(
+        collection(db, "directMessages", dmId, "messages"),
+        orderBy("createdAt", "desc"),
+        limit(200)
+      )
+      const snap = await getDocs(inviteQuery)
+      return snap.docs.some(d => {
+        const m = d.data() || {}
+        return m.type === "channel_invite" &&
+          m.channelId === channelId &&
+          m.invitedUserId === targetUserId &&
+          !(m.inviteAcceptedBy || []).includes(targetUserId)
+      })
+    } catch {
+      return false
+    }
+  }
+
+  async function acceptChannelInvite(msg) {
+    if (!msg?.channelId) return
+
+    const channelRef = doc(db, "channels", msg.channelId)
+    const channelSnap = await getDoc(channelRef)
+    if (!channelSnap.exists()) {
+      pushNotif("error", "Ryhmää ei löytynyt")
+      return
+    }
+
+    const channelData = channelSnap.data() || {}
+    const alreadyMember = (channelData.members || []).includes(user.uid)
+    if (!alreadyMember) {
+      await updateDoc(channelRef, { members: arrayUnion(user.uid) })
+    }
+
+    const msgRef = activeChannel
+      ? doc(db, "channels", activeChannel.id, "messages", msg.id)
+      : doc(db, "directMessages", activeDm.id, "messages", msg.id)
+    await updateDoc(msgRef, {
+      inviteAcceptedBy: arrayUnion(user.uid),
+      inviteAcceptedAt: serverTimestamp(),
+    })
+
+    if (!alreadyMember) pushNotif("success", `Liityit ryhmään #${msg.channelName || "ryhma"}`)
+  }
+
+  function openInvitedChannel(msg) {
+    if (!msg?.channelId) return
+    const target = channels.find(ch => ch.id === msg.channelId)
+    if (target) {
+      selectChannel(target)
+      return
+    }
+    const fallbackSlug = toChatSlug(msg.channelName || msg.channelId)
+    navigate(`/chat/channel/${encodeURIComponent(fallbackSlug)}`)
   }
 
   async function openDM(targetUser) {
@@ -697,6 +1032,14 @@ export default function ChatPage() {
     const ref2 = doc(db,"directMessages",dmId)
     const snap = await getDoc(ref2)
     if (!snap.exists()) await setDoc(ref2,{participants:isSelf?[user.uid,user.uid]:[user.uid,targetUser.id],lastMessageAt:serverTimestamp(),lastMessage:"",isSelfNote:isSelf})
+    if (!isSelf && hiddenDmUsers[targetUser.id]) {
+      setHiddenDmUsers(prev => {
+        const next = { ...prev }
+        delete next[targetUser.id]
+        try { localStorage.setItem("hiddenDmUsers", JSON.stringify(next)) } catch {}
+        return next
+      })
+    }
     const label = isSelf?{...targetUser,displayName:"📝 Muistiinpanot"}:targetUser
     setActiveDm({id:dmId,otherUser:label,isSelfNote:isSelf})
     setActiveChannel(null); setDmSettings(false)
@@ -753,6 +1096,40 @@ export default function ChatPage() {
       if (equipmentChat && activeDm?.id !== equipmentChat.id) openEquipmentChat(equipmentChat, false)
     }
   }, [chatType, chatTarget, channels, allUsers, equipmentChats, user.uid])
+
+  useEffect(() => {
+    setMessageSearch("")
+  }, [activeChannel?.id, activeDm?.id])
+
+  useEffect(() => {
+    if (!showInvite || !activeChannel) return
+    if (inviteCandidates.length === 0) return
+
+    let cancelled = false
+    setLoadingInviteStatuses(true)
+
+    Promise.all(inviteCandidates.map(async u2 => {
+      const sent = await hasPendingChannelInvite(activeChannel.id, u2.id)
+      return [u2.id, sent]
+    })).then(entries => {
+      if (cancelled) return
+      setChannelInviteSentMap(prev => {
+        const next = { ...prev }
+        entries.forEach(([uid, sent]) => {
+          next[`${activeChannel.id}:${uid}`] = Boolean(sent)
+        })
+        return next
+      })
+      setLoadingInviteStatuses(false)
+    }).catch(() => {
+      if (cancelled) return
+      setLoadingInviteStatuses(false)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [showInvite, activeChannel?.id, allUsers, user.uid])
 
   async function resolveReport(id,action) { await updateDoc(doc(db,"moderation",id),{status:action,resolvedAt:serverTimestamp()}) }
   async function addMemberToChannel(uid) { if (!activeChannel || !isChannelAdmin) return; await updateDoc(doc(db,"channels",activeChannel.id),{members:arrayUnion(uid)}) }
@@ -904,6 +1281,17 @@ export default function ChatPage() {
 
   function formatTime(ts) { if (!ts) return ""; const d=ts.toDate?ts.toDate():new Date(ts); return d.toLocaleTimeString("fi-FI",{hour:"2-digit",minute:"2-digit"}) }
   function formatDate(ts) { if (!ts) return ""; const d=ts.toDate?ts.toDate():new Date(ts); return d.toLocaleDateString("fi-FI") }
+  function formatChatDayLabel(ts) {
+    if (!ts) return "Tuntematon päivä"
+    const d = ts.toDate ? ts.toDate() : new Date(ts)
+    const base = d.toLocaleDateString("fi-FI", { day: "numeric", month: "long", year: "numeric" })
+    return base.charAt(0).toUpperCase() + base.slice(1)
+  }
+  function getChatDayKey(ts) {
+    if (!ts) return ""
+    const d = ts.toDate ? ts.toDate() : new Date(ts)
+    return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+  }
   function formatLastSeen(ts) {
     if (!ts) return "Ei tietoa"
     const d=ts.toDate?ts.toDate():new Date(ts); const diff=(Date.now()-d.getTime())/1000/60
@@ -919,6 +1307,27 @@ export default function ChatPage() {
   const charsLeft = MAX_MSG_LENGTH - text.length
   const slowMode = activeChannel?.slowMode||0
   const canSend = !activeDm?.closedAt && (text.trim().length>0||pendingGif||pendingFiles.length>0)
+  const visibleDmUsers = allUsers.filter(u2=>u2.id!==user.uid&&!hiddenDmUsers[u2.id])
+  const inviteCandidates = activeChannel
+    ? allUsers.filter(u2 => u2.id !== user.uid && !activeChannel.members?.includes(u2.id))
+    : []
+  const inviteCandidatesWithState = inviteCandidates.map(u2 => ({
+    ...u2,
+    inviteSent: Boolean(activeChannel && channelInviteSentMap[`${activeChannel.id}:${u2.id}`]),
+  }))
+  const normalizedMessageSearch = messageSearch.trim().toLowerCase()
+  const filteredMessages = normalizedMessageSearch
+    ? messages.filter(msg => {
+        const haystack = [
+          msg.text,
+          msg.senderName,
+          msg.channelName,
+          msg.channelDescription,
+          msg.invitedByName,
+        ].filter(Boolean).join(" ").toLowerCase()
+        return haystack.includes(normalizedMessageSearch)
+      })
+    : messages
   const sortedChannels = [...channels].sort((a, b) => {
     const aPinned = pinnedItems[a.id] ? 1 : 0
     const bPinned = pinnedItems[b.id] ? 1 : 0
@@ -965,6 +1374,11 @@ export default function ChatPage() {
   const isClosedEquipmentChat = Boolean(activeDm?.isEquipmentChat && activeDm?.closedAt)
   const openEquipmentChats = equipmentChats.filter(chat => !chat.closedAt)
   const archivedEquipmentChats = equipmentChats.filter(chat => chat.closedAt)
+  const frequentEmojis = Object.entries(frequentEmojiUsage)
+    .sort((a, b) => (b[1] || 0) - (a[1] || 0))
+    .map(([emoji]) => emoji)
+  const quickReactionEmojis = Array.from(new Set([...frequentEmojis, ...QUICK_REACTIONS])).slice(0, QUICK_REACTION_COUNT)
+  const contextReactionEmojis = Array.from(new Set([...frequentEmojis, ...QUICK_REACTIONS])).slice(0, 8)
   const hasCancellationRequest = Boolean(equipmentRequestDetails?.cancellationRequestedAt) &&
     (equipmentRequestDetails?.status === "pending" || equipmentRequestDetails?.status === "approved")
   const equipmentStatusMeta = activeDm?.closedAt
@@ -978,7 +1392,7 @@ export default function ChatPage() {
           : { text: "Odottaa hyväksyntää", color: "#f59e0b", bg: "rgba(245,158,11,0.12)" }
 
   return (
-    <div style={{display:"flex",flex:1,overflow:"hidden"}} onClick={()=>{setContextMenu(null);setSidebarCtxMenu(null);setShowEmoji(false);setShowGif(false);setHoverMsg(null);setShowAttach(false)}}>
+    <div style={{display:"flex",flex:1,overflow:"hidden"}} onClick={()=>{setContextMenu(null);setSidebarCtxMenu(null);setShowEmoji(false);setShowReactionEmojiPicker(false);setReactionPickerMsg(null);setShowGif(false);setHoverMsg(null);setShowAttach(false)}}>
 
       {/* Sidebar */}
       {showSidebar && (
@@ -995,7 +1409,17 @@ export default function ChatPage() {
             <button onClick={e=>{e.stopPropagation();setShowNewChannel(true)}} style={sectionAddBtn}>＋</button>
           </div>
           <div style={{overflowY:"auto",flex:1}}>
-            {sortedChannels.map(ch=>(
+            {loadingChannels && (
+              <div style={{padding:"6px 12px",fontSize:12,color:"var(--text3)"}}>
+                Ladataan ryhmiä...
+              </div>
+            )}
+            {!loadingChannels && sortedChannels.length === 0 && (
+              <div style={{padding:"6px 12px",fontSize:12,color:"var(--text3)"}}>
+                Ei ryhmiä vielä.
+              </div>
+            )}
+            {!loadingChannels && sortedChannels.map(ch=>(
               <div key={ch.id} onClick={()=>selectChannel(ch)}
                 onContextMenu={e=>{e.preventDefault();e.stopPropagation();setSidebarCtxMenu({x:e.clientX,y:e.clientY,type:"channel",item:ch})}}
                 style={{padding:"6px 12px",cursor:"pointer",fontSize:13,borderRadius:6,margin:"1px 4px",display:"flex",alignItems:"center",gap:6,
@@ -1040,7 +1464,17 @@ export default function ChatPage() {
             )}
 
             {/* DM-lista */}
-            {allUsers.filter(u2=>u2.id!==user.uid&&!hiddenDmUsers[u2.id]).map(u2=>(
+            {loadingDmUsers && (
+              <div style={{padding:"6px 12px",fontSize:12,color:"var(--text3)"}}>
+                Ladataan keskusteluita...
+              </div>
+            )}
+            {!loadingDmUsers && visibleDmUsers.length === 0 && (
+              <div style={{padding:"6px 12px",fontSize:12,color:"var(--text3)"}}>
+                Ei keskusteluita vielä.
+              </div>
+            )}
+            {!loadingDmUsers && visibleDmUsers.map(u2=>(
               <div key={u2.id} onClick={()=>openDM(u2)}
                 onContextMenu={e=>{e.preventDefault();e.stopPropagation();const dmId=[user.uid,u2.id].sort().join("_");setSidebarCtxMenu({x:e.clientX,y:e.clientY,type:"dm",item:u2,dmId})}}
                 style={{padding:"5px 10px",cursor:"pointer",fontSize:13,borderRadius:6,margin:"1px 4px",display:"flex",alignItems:"center",gap:7,
@@ -1070,13 +1504,19 @@ export default function ChatPage() {
                 <button onClick={e=>{e.stopPropagation();setShowEquipmentChatPicker(true)}} style={sectionAddBtn} title="Kalustovaraukset">＋</button>
             </div>
 
-            {equipmentChats.length === 0 && (
+            {loadingEquipmentChats && (
+              <div style={{padding:"6px 12px",fontSize:12,color:"var(--text3)"}}>
+                Ladataan kalustovarauksia...
+              </div>
+            )}
+
+            {!loadingEquipmentChats && equipmentChats.length === 0 && (
               <div style={{padding:"6px 12px",fontSize:12,color:"var(--text3)"}}>
                 Ei keskusteluja vielä.
               </div>
             )}
 
-            {openEquipmentChats.map(chat => (
+            {!loadingEquipmentChats && openEquipmentChats.map(chat => (
               <div key={chat.id} onClick={()=>openEquipmentChat(chat)}
                 onContextMenu={e=>{e.preventDefault();e.stopPropagation();setSidebarCtxMenu({x:e.clientX,y:e.clientY,type:"equipment",item:chat})}}
                 style={{padding:"6px 10px",cursor:"pointer",fontSize:13,borderRadius:6,margin:"1px 4px",display:"flex",alignItems:"center",gap:8,
@@ -1102,7 +1542,7 @@ export default function ChatPage() {
               </div>
             ))}
 
-            {archivedEquipmentChats.length > 0 && (
+            {!loadingEquipmentChats && archivedEquipmentChats.length > 0 && (
               <>
                 <div style={{padding:"12px 10px 6px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                   <span style={{fontSize:10,fontWeight:600,color:"var(--text3)",textTransform:"uppercase",letterSpacing:"0.08em"}}>Arkistoidut</span>
@@ -1134,14 +1574,6 @@ export default function ChatPage() {
               </>
             )}
           </div>
-          {isAdmin&&(
-            <div style={{padding:"8px",borderTop:"1px solid var(--border)"}}>
-              <button onClick={e=>{e.stopPropagation();setShowInvite(true)}}
-                style={{width:"100%",padding:"7px",background:"rgba(79,126,247,0.15)",border:"none",borderRadius:8,color:"#4f7ef7",fontSize:12,cursor:"pointer",fontFamily:"system-ui"}}>
-                + Kutsu johtaja
-              </button>
-            </div>
-          )}
         </div>
       )}
 
@@ -1214,8 +1646,22 @@ export default function ChatPage() {
             )
           ) : <span style={{fontSize:14,color:"var(--text3)",flex:1}}>Valitse kanava, henkilö tai kalustovaraus</span>
           }
+          {(activeChannel || activeDm) && (
+            <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
+              <input
+                value={messageSearch}
+                onChange={e=>setMessageSearch(e.target.value)}
+                placeholder="🔎 Hae viestejä..."
+                style={{width:220,background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:8,padding:"6px 10px",color:"var(--text)",fontSize:12,fontFamily:"system-ui",outline:"none"}}
+              />
+              <button onClick={()=>setShowPinnedMessages(true)} style={iconBtn} title="Kiinnitetyt viestit">📌</button>
+            </div>
+          )}
           {activeChannel&&isChannelMuted(activeChannel.id)&&(
             <button onClick={()=>setMutedChannels(prev=>{const n={...prev};delete n[activeChannel.id];return n})} style={{...iconBtn,color:"#f59e0b",fontSize:12}}>🔕</button>
+          )}
+          {activeChannel&&isChannelAdmin&&(
+            <button onClick={e=>{e.stopPropagation();setShowInvite(true)}} style={iconBtn} title="Kutsu ryhmään">✉️</button>
           )}
           {activeChannel&&(isChannelAdmin || isEquipmentManager)&&(
             <button onClick={e=>{e.stopPropagation();openChannelSettings()}} style={iconBtn} title="Avaa kanavan säädöt">⚙️</button>
@@ -1251,25 +1697,43 @@ export default function ChatPage() {
         {(activeChannel||activeDm)&&(
           <>
             <div style={{flex:1,overflowY:"auto",padding:"16px 20px",display:"flex",flexDirection:"column",gap:2}}>
-              {messages.map((msg,i)=>{
+              {normalizedMessageSearch && filteredMessages.length===0 && (
+                <div style={{padding:"18px 10px",fontSize:13,color:"var(--text3)",textAlign:"center"}}>
+                  Ei hakutuloksia haulla "{messageSearch.trim()}".
+                </div>
+              )}
+              {filteredMessages.map((msg,i)=>{
+                const showDayDivider = i===0 || getChatDayKey(filteredMessages[i-1]?.createdAt) !== getChatDayKey(msg.createdAt)
                 const isMine=msg.senderId===user.uid
-                const rawShowAvatar=i===0||messages[i-1]?.senderId!==msg.senderId
+                const isChannelInviteMessage = msg.type === "channel_invite"
+                const rawShowAvatar=isChannelInviteMessage||i===0||filteredMessages[i-1]?.senderId!==msg.senderId
                 const showAvatar=!condensedChat&&rawShowAvatar
                 const isHovered=hoverMsg===msg.id
                 const readCount=msg.readBy?msg.readBy.filter(id=>id!==msg.senderId).length:0
                 const isEquipmentSystemMessage = msg.type === "equipment_request" || msg.type === "equipment_action" || msg.type === "equipment_closed" || msg.type === "equipment_reopened" || msg.type === "equipment_cancel_request"
+                const inviteJoined = isChannelInviteMessage && ((msg.inviteAcceptedBy || []).includes(user.uid) || channels.some(ch => ch.id === msg.channelId))
+                const inviteForMe = isChannelInviteMessage && msg.invitedUserId === user.uid
                 return (
-                  <div key={msg.id}
-                    onMouseEnter={()=>setHoverMsg(msg.id)} onMouseLeave={()=>setHoverMsg(null)}
-                    onContextMenu={e=>{e.preventDefault();e.stopPropagation();setContextMenu({x:e.clientX,y:e.clientY,msg})}}
-                    style={{display:"flex",gap:condensedChat?6:10,alignItems:"flex-start",padding:condensedChat?"2px 6px":"3px 6px",borderRadius:8,marginTop:showAvatar?10:0,position:"relative",
-                      background:isHovered?"rgba(255,255,255,0.03)":"transparent"}}>
+                  <div key={msg.id} id={`msg-${msg.id}`}>
+                    {showDayDivider && (
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"center",margin:"10px 0 8px"}}>
+                        <span style={{fontSize:11,color:"var(--text3)",letterSpacing:"0.04em"}}>
+                          {`--- ${formatChatDayLabel(msg.createdAt)} ---`}
+                        </span>
+                      </div>
+                    )}
+                    <div
+                      onMouseEnter={()=>setHoverMsg(msg.id)} onMouseLeave={()=>setHoverMsg(null)}
+                      onContextMenu={e=>{e.preventDefault();e.stopPropagation();setContextMenu({x:e.clientX,y:e.clientY,msg})}}
+                      style={{display:"flex",gap:condensedChat?6:10,alignItems:"flex-start",padding:condensedChat?"2px 6px":"3px 6px",borderRadius:8,marginTop:showAvatar?10:0,position:"relative",
+                        background:isHovered?"rgba(255,255,255,0.03)":"transparent"}}>
                     {isHovered&&!msg.deleted&&(
                       <div style={{position:"absolute",right:10,top:-4,background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:10,padding:"3px 6px",display:"flex",gap:2,zIndex:5,boxShadow:"0 4px 16px rgba(0,0,0,0.4)"}}
                         onClick={e=>e.stopPropagation()}>
-                        {QUICK_REACTIONS.map(e=>(
+                        {quickReactionEmojis.map(e=>(
                           <button key={e} onClick={()=>toggleReaction(msg,e)} style={{fontSize:16,padding:"2px 4px",cursor:"pointer",border:"none",background:"transparent",borderRadius:5}}>{e}</button>
                         ))}
+                        <button onClick={(e)=>openReactionPicker(msg, e.currentTarget.getBoundingClientRect())} style={{fontSize:16,padding:"2px 6px",cursor:"pointer",border:"none",background:"transparent",borderRadius:5,color:"var(--text2)"}} title="Lisää reaktio">＋</button>
                         <div style={{width:"1px",background:"var(--border2)",margin:"2px 4px"}}/>
                         <button onClick={()=>setReplyTo(msg)} style={{...iconBtn,fontSize:14,padding:"2px 6px"}} title="Vastaa">↩</button>
                         {isMine&&(<>
@@ -1295,7 +1759,7 @@ export default function ChatPage() {
                         </div>
                       )}
                       {msg.deleted
-                        ? <span style={{fontStyle:"italic",color:"var(--text3)",fontSize:13}}>[viesti poistettu]</span>
+                        ? <span style={{fontStyle:"italic",color:"var(--text3)",fontSize:13}}>{msg.deletedByModerator ? "[Viesti poistettu modin toimesta]" : "[viesti poistettu]"}</span>
                         : editingMsg?.id===msg.id
                           ? <div onClick={e=>e.stopPropagation()}>
                               <textarea value={editText} onChange={e=>setEditText(e.target.value)}
@@ -1307,7 +1771,33 @@ export default function ChatPage() {
                               </div>
                             </div>
                           : <>
-                              {msg.text && (isEquipmentSystemMessage
+                              {isChannelInviteMessage && msg.text && (
+                                <p style={{margin:"0 0 6px",fontSize:14,lineHeight:1.55,wordBreak:"break-word",color:"var(--text)"}}>
+                                  <TextWithLinks text={msg.text} onLinkClick={openLink}/>
+                                </p>
+                              )}
+                              {isChannelInviteMessage && (
+                                <div style={{marginTop:2,background:"rgba(79,126,247,0.1)",border:"1px solid rgba(79,126,247,0.25)",borderRadius:10,padding:"10px 12px"}}>
+                                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                                    <div style={{fontSize:12,color:"#4f7ef7",fontWeight:600}}>📨 Ryhmäkutsu</div>
+                                    <span style={{fontSize:10,color:inviteForMe?"#22c55e":"#f59e0b",background:inviteForMe?"rgba(34,197,94,0.14)":"rgba(245,158,11,0.14)",padding:"2px 7px",borderRadius:999}}>
+                                      {inviteForMe ? "Kutsu sinulle" : "Kutsu lähetetty"}
+                                    </span>
+                                  </div>
+                                  <div style={{fontSize:13,fontWeight:600,color:"var(--text)",marginBottom:4}}>#{msg.channelName || "Ryhmä"}</div>
+                                  <div style={{fontSize:12,color:"var(--text2)",marginBottom:4}}>{msg.channelDescription || "Ei kuvausta"}</div>
+                                  <div style={{fontSize:11,color:"var(--text3)",marginBottom:8}}>
+                                    Jäseniä: {msg.channelMemberCount || 0} · Luotu: {formatDate(msg.channelCreatedAt)}
+                                  </div>
+                                  <button
+                                    onClick={() => inviteJoined ? openInvitedChannel(msg) : acceptChannelInvite(msg)}
+                                    style={{background:inviteJoined?"rgba(34,197,94,0.2)":"#4f7ef7",border:inviteJoined?"1px solid rgba(34,197,94,0.45)":"none",borderRadius:8,color:inviteJoined?"#22c55e":"#fff",padding:"6px 12px",cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:"system-ui"}}
+                                  >
+                                    {inviteJoined ? "Liitytty" : "Liity ryhmään"}
+                                  </button>
+                                </div>
+                              )}
+                              {msg.text && !isChannelInviteMessage && (isEquipmentSystemMessage
                                 ? <div style={{marginTop:2,background:"rgba(79,126,247,0.1)",border:"1px solid rgba(79,126,247,0.22)",borderLeft:"3px solid #4f7ef7",borderRadius:"0 8px 8px 0",padding:"7px 10px",fontSize:13,lineHeight:1.5,color:"var(--text2)"}}>
                                     <TextWithLinks text={msg.text} onLinkClick={openLink}/>
                                   </div>
@@ -1339,6 +1829,7 @@ export default function ChatPage() {
                           {activeDm?.isSelfNote ? "✓ Tallennettu" : (readCount>0 ? `✓✓ Luettu (${readCount})` : "✓ Lähetetty")}
                         </div>
                       )}
+                    </div>
                     </div>
                   </div>
                 )
@@ -1448,8 +1939,17 @@ export default function ChatPage() {
 
               {/* Emoji */}
               {showEmoji&&(
-                <div style={{position:"absolute",bottom:70,left:20,background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:12,padding:12,display:"grid",gridTemplateColumns:"repeat(8,1fr)",gap:4,zIndex:10,boxShadow:"0 8px 32px rgba(0,0,0,0.5)"}}>
-                  {EMOJIS.map(e=><button key={e} onClick={()=>appendEmoji(e)} style={{fontSize:20,padding:4,cursor:"pointer",border:"none",background:"transparent",borderRadius:6}}>{e}</button>)}
+                <div style={{position:"absolute",bottom:70,left:20,background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:12,padding:10,zIndex:10,boxShadow:"0 8px 32px rgba(0,0,0,0.5)"}} onClick={e=>e.stopPropagation()}>
+                  <EmojiPicker
+                    onEmojiClick={(emojiData) => appendEmoji(emojiData.emoji)}
+                    theme={emojiPickerTheme}
+                    width={320}
+                    height={360}
+                    previewConfig={{ showPreview: false }}
+                    suggestedEmojisMode="frequent"
+                    searchPlaceHolder="Hae emoji..."
+                    lazyLoadEmojis
+                  />
                 </div>
               )}
 
@@ -1684,15 +2184,21 @@ export default function ChatPage() {
         <div style={{position:"fixed",left:contextMenu.x,top:contextMenu.y,background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:10,padding:6,zIndex:100,minWidth:170,boxShadow:"0 8px 32px rgba(0,0,0,0.6)"}}
           onClick={e=>e.stopPropagation()}>
           <div style={{display:"flex",flexWrap:"wrap",gap:2,marginBottom:4}}>
-            {EMOJIS.slice(0,8).map(e=><button key={e} onClick={()=>{toggleReaction(contextMenu.msg,e);setContextMenu(null)}} style={{fontSize:18,padding:"3px 5px",cursor:"pointer",border:"none",background:"transparent",borderRadius:6}}>{e}</button>)}
+            {contextReactionEmojis.map(e=><button key={e} onClick={()=>{toggleReaction(contextMenu.msg,e);setContextMenu(null)}} style={{fontSize:18,padding:"3px 5px",cursor:"pointer",border:"none",background:"transparent",borderRadius:6}}>{e}</button>)}
+            <button onClick={(e)=>{openReactionPicker(contextMenu.msg, e.currentTarget.getBoundingClientRect());setContextMenu(null)}} style={{fontSize:18,padding:"3px 7px",cursor:"pointer",border:"none",background:"transparent",borderRadius:6,color:"var(--text2)"}} title="Lisää reaktio">＋</button>
           </div>
           <div style={{height:"1px",background:"var(--border)",margin:"4px 0"}}/>
           <div onClick={()=>{setReplyTo(contextMenu.msg);setContextMenu(null)}} style={ctxItem}>↩ Vastaa</div>
+          <div onClick={()=>copyMessageText(contextMenu.msg)} style={ctxItem}>📋 Kopioi teksti</div>
+          <div onClick={()=>openForwardModal(contextMenu.msg)} style={ctxItem}>📨 Lähetä uudelleen viesti</div>
+          <div onClick={()=>togglePinMessage(contextMenu.msg)} style={ctxItem}>{contextMenu.msg.pinned ? "📌 Poista kiinnitys" : "📌 Kiinnitä"}</div>
           {contextMenu.msg.senderId===user.uid&&!contextMenu.msg.deleted&&(
             <div onClick={()=>{setEditingMsg(contextMenu.msg);setEditText(contextMenu.msg.text);setContextMenu(null)}} style={ctxItem}>✏️ Muokkaa</div>
           )}
-          {(contextMenu.msg.senderId===user.uid||isAdmin)&&(
-            <div onClick={()=>deleteMessage(contextMenu.msg)} style={{...ctxItem,color:"#f87171"}}>🗑️ Poista</div>
+          {(contextMenu.msg.senderId===user.uid || (activeChannel && isChannelAdmin && contextMenu.msg.senderId!==user.uid))&&(
+            <div onClick={()=>deleteMessage(contextMenu.msg, Boolean(activeChannel && isChannelAdmin && contextMenu.msg.senderId!==user.uid))} style={{...ctxItem,color:"#f87171"}}>
+              🗑️ Poista
+            </div>
           )}
           <div onClick={()=>{const u2=allUsers.find(u=>u.id===contextMenu.msg.senderId);if(u2){setProfileModal(u2);setContextMenu(null)}}} style={ctxItem}>👤 Profiili</div>
           {activeChannel&&(<>
@@ -1701,6 +2207,27 @@ export default function ChatPage() {
             {[15,60,480,1440].map(m=><div key={m} onClick={()=>muteChannel(activeChannel.id,m)} style={ctxItem}>🔕 {m<60?m+" min":m<1440?m/60+" t":"24 t"}</div>)}
           </>)}
           <div onClick={()=>reportMessage(contextMenu.msg)} style={{...ctxItem,color:"var(--text2)"}}>🚩 Raportoi</div>
+        </div>
+      )}
+
+      {showReactionEmojiPicker && reactionPickerMsg && (
+        <div style={{position:"fixed",inset:0,background:"transparent",zIndex:130}} onClick={()=>{setShowReactionEmojiPicker(false);setReactionPickerMsg(null)}}>
+          <div style={{position:"absolute",left:reactionPickerPos.x,top:reactionPickerPos.y,background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:12,padding:10,boxShadow:"0 10px 40px rgba(0,0,0,0.6)",width:REACTION_PICKER_WIDTH,maxWidth:"calc(100vw - 24px)"}} onClick={e=>e.stopPropagation()}>
+            <EmojiPicker
+              onEmojiClick={(emojiData) => {
+                toggleReaction(reactionPickerMsg, emojiData.emoji)
+                setShowReactionEmojiPicker(false)
+                setReactionPickerMsg(null)
+              }}
+              theme={emojiPickerTheme}
+              width="100%"
+              height={360}
+              previewConfig={{ showPreview: false }}
+              suggestedEmojisMode="frequent"
+              searchPlaceHolder="Hae reaktio..."
+              lazyLoadEmojis
+            />
+          </div>
         </div>
       )}
 
@@ -2014,16 +2541,108 @@ export default function ChatPage() {
 
       {/* Kutsu */}
       {showInvite&&(
-        <Modal title="Kutsu johtaja" onClose={()=>setShowInvite(false)}>
-          <label style={lbl}>Sähköposti</label><input value={inviteEmail} onChange={e=>setInviteEmail(e.target.value)} placeholder="johtaja@maahiset.net" style={inp} type="email"/>
-          <label style={lbl}>Rooli</label>
-          <select value={inviteRole} onChange={e=>setInviteRole(e.target.value)} style={inp}>
-            <option value="lippukunnanjohtaja">Lippukunnanjohtaja</option><option value="johtaja">Johtaja</option><option value="apulaisjohtaja">Apulaisjohtaja</option>
-          </select>
+        <Modal title={activeChannel ? `Kutsu ryhmään #${activeChannel.name}` : "Kutsu ryhmään"} onClose={()=>setShowInvite(false)}>
+          {!activeChannel && (
+            <div style={{fontSize:12,color:"var(--text3)",marginBottom:12}}>Valitse ensin ryhmä, johon haluat kutsua jäsenen.</div>
+          )}
+          {activeChannel && (
+            <>
+              <label style={lbl}>Valitse jäsen</label>
+              <select value={inviteTargetUserId} onChange={e=>setInviteTargetUserId(e.target.value)} style={inp}>
+                <option value="">Valitse jäsen...</option>
+                {inviteCandidatesWithState.map(u2 => (
+                  <option key={u2.id} value={u2.id}>{u2.displayName}{u2.inviteSent ? " (kutsu lähetetty)" : ""}</option>
+                ))}
+              </select>
+              {loadingInviteStatuses && (
+                <div style={{fontSize:12,color:"var(--text3)",marginTop:8}}>Tarkistetaan aiempia kutsuja...</div>
+              )}
+              {inviteTargetUserId && inviteCandidatesWithState.find(u2 => u2.id === inviteTargetUserId)?.inviteSent && (
+                <div style={{fontSize:12,color:"#f59e0b",marginTop:8}}>Tälle jäsenelle on jo lähetetty kutsu tähän ryhmään.</div>
+              )}
+              {inviteCandidates.length === 0 && (
+                <div style={{fontSize:12,color:"var(--text3)",marginTop:8}}>Kaikki jäsenet ovat jo tässä ryhmässä.</div>
+              )}
+            </>
+          )}
           <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:16}}>
             <button onClick={()=>setShowInvite(false)} style={btnGhost}>Peruuta</button>
-            <button onClick={sendInvite} style={btnPrimary}>Lähetä</button>
+            <button
+              onClick={sendInvite}
+              disabled={!activeChannel || !inviteTargetUserId || loadingInviteStatuses || Boolean(inviteCandidatesWithState.find(u2 => u2.id === inviteTargetUserId)?.inviteSent)}
+              style={{
+                ...btnPrimary,
+                opacity:(!activeChannel || !inviteTargetUserId || loadingInviteStatuses || Boolean(inviteCandidatesWithState.find(u2 => u2.id === inviteTargetUserId)?.inviteSent))?0.55:1,
+                cursor:(!activeChannel || !inviteTargetUserId || loadingInviteStatuses || Boolean(inviteCandidatesWithState.find(u2 => u2.id === inviteTargetUserId)?.inviteSent))?"default":"pointer"
+              }}>
+              Lähetä kutsu
+            </button>
           </div>
+        </Modal>
+      )}
+
+      {showForwardModal && (
+        <Modal title="Lähetä uudelleen viesti" onClose={()=>{setShowForwardModal(false);setForwardMsg(null);setForwardTargetId("")}}>
+          <div style={{fontSize:12,color:"var(--text3)",marginBottom:10}}>
+            Alkuperäinen lähettäjä: <strong style={{color:"var(--text2)"}}>{forwardMsg?.senderName || "Tuntematon"}</strong>
+          </div>
+          <div style={{fontSize:12,color:"var(--text3)",background:"var(--bg3)",borderRadius:8,padding:"8px 10px",marginBottom:12}}>
+            {forwardMsg?.text?.slice(0,120) || "[GIF / liite]"}
+          </div>
+
+          <label style={lbl}>Kohdetyyppi</label>
+          <select value={forwardTargetType} onChange={e=>{setForwardTargetType(e.target.value);setForwardTargetId("")}} style={inp}>
+            <option value="channel">Ryhmä</option>
+            <option value="dm">Jäsen (yksityisviesti)</option>
+          </select>
+
+          <label style={lbl}>Kohde</label>
+          <select value={forwardTargetId} onChange={e=>setForwardTargetId(e.target.value)} style={inp}>
+            <option value="">Valitse kohde...</option>
+            {forwardTargetType === "channel"
+              ? channels.map(ch => <option key={ch.id} value={ch.id}>#{ch.name}</option>)
+              : allUsers.filter(u2 => u2.id !== user.uid).map(u2 => <option key={u2.id} value={u2.id}>{u2.displayName}</option>)}
+          </select>
+
+          <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:16}}>
+            <button onClick={()=>{setShowForwardModal(false);setForwardMsg(null);setForwardTargetId("")}} style={btnGhost}>Peruuta</button>
+            <button onClick={forwardMessage} disabled={!forwardTargetId}
+              style={{...btnPrimary,opacity:forwardTargetId?1:0.55,cursor:forwardTargetId?"pointer":"default"}}>
+              Lähetä
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {showPinnedMessages && (
+        <Modal title="Kiinnitetyt viestit" onClose={()=>setShowPinnedMessages(false)}>
+          {pinnedMessages.length === 0 ? (
+            <div style={{fontSize:12,color:"var(--text3)",padding:"6px 2px"}}>Ei kiinnitettyjä viestejä tässä keskustelussa.</div>
+          ) : (
+            <div style={{display:"flex",flexDirection:"column",gap:8,maxHeight:360,overflowY:"auto"}}>
+              {pinnedMessages.map(pm => (
+                <div key={pm.id}
+                  style={{textAlign:"left",background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:9,padding:"9px 10px",color:"var(--text)",fontFamily:"system-ui"}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:3}}>
+                    <div style={{fontSize:12,fontWeight:600}}>{pm.senderName || "Tuntematon"}</div>
+                    {(pm.senderId === user.uid || isAdmin || (activeChannel && isChannelAdmin)) && (
+                      <button
+                        onClick={()=>togglePinMessage(pm)}
+                        style={{background:"transparent",border:"1px solid var(--border2)",borderRadius:6,color:"var(--text2)",fontSize:11,padding:"3px 8px",cursor:"pointer",fontFamily:"system-ui"}}
+                      >
+                        Poista kiinnitys
+                      </button>
+                    )}
+                  </div>
+                  <button onClick={()=>jumpToMessage(pm.id)}
+                    style={{textAlign:"left",background:"transparent",border:"none",padding:0,cursor:"pointer",color:"inherit",fontFamily:"system-ui",width:"100%"}}>
+                    <div style={{fontSize:12,color:"var(--text2)",lineHeight:1.45,wordBreak:"break-word"}}>{pm.text?.slice(0,140) || "[GIF / liite]"}</div>
+                    <div style={{fontSize:10,color:"var(--text3)",marginTop:4}}>{formatDate(pm.pinnedAt || pm.createdAt)} {formatTime(pm.pinnedAt || pm.createdAt)}</div>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </Modal>
       )}
 
