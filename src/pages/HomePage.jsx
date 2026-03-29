@@ -58,7 +58,7 @@ export default function HomePage() {
       if (compareVersions(latest, VERSION) > 0) {
         window.__pushToast?.(`Uusi versio ${latest} saatavilla - päivitä sivu`, "info")
       } else {
-        window.__pushToast?.("Sovellus on ajan tasalla ✓", "success")
+        window.__pushToast?.("Sivu on ajan tasalla ✓", "success")
       }
     } finally {
       setChecking(false)
@@ -106,7 +106,7 @@ export default function HomePage() {
             disabled={checking}
             style={{ background: "#4f7ef7", border: "1px solid #4f7ef7", color: "#fff", borderRadius: 10, padding: "10px 14px", fontSize: 14, cursor: checking ? "wait" : "pointer", opacity: checking ? 0.75 : 1, fontFamily: "system-ui" }}
           >
-            {checking ? "Tarkistetaan..." : "Tarkista paivitykset"}
+            {checking ? "Tarkistetaan..." : "Tarkista päivitykset"}
           </button>
         </div>
 
