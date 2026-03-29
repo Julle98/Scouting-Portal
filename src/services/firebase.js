@@ -20,3 +20,7 @@ export const db       = getFirestore(app);
 export const googleProvider = new GoogleAuthProvider();
 
 googleProvider.setCustomParameters({ prompt: "select_account" });
+// Lisää Drive-scopes
+googleProvider.addScope("https://www.googleapis.com/auth/drive.readonly");
+googleProvider.addScope("https://www.googleapis.com/auth/userinfo.profile");
+googleProvider.addScope("https://www.googleapis.com/auth/userinfo.email");

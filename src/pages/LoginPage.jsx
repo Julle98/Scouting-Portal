@@ -66,14 +66,15 @@ function TermsModal({ type, onClose, showBackToLogin = false, onBackToLogin }) {
         </h3>
         {type === "terms" ? (
           <div style={{ fontSize:13, color:"var(--text2)", lineHeight:1.8 }}>
-            <p><strong style={{ color:"var(--text)" }}>1. Sovelluksen käyttö</strong><br/>Partio-portaali on tarkoitettu Maahiset-lippukunnan johtajien sisäiseen käyttöön.</p>
+            <p><strong style={{ color:"var(--text)" }}>1. Sovelluksen käyttö</strong><br/>Maahiset-portaali on tarkoitettu Maahiset-lippukunnan johtajien sisäiseen käyttöön.</p>
             <p><strong style={{ color:"var(--text)" }}>2. Käyttäytyminen</strong><br/>Käyttäjät sitoutuvat asialliseen käytökseen. Häirintä tai asiattomat viestit voivat johtaa käyttöoikeuden poistoon.</p>
             <p><strong style={{ color:"var(--text)" }}>3. Sisältö</strong><br/>Käyttäjä vastaa lähettämästään sisällöstä. Laitonta sisältöä ei sallita.</p>
           </div>
         ) : (
           <div style={{ fontSize:13, color:"var(--text2)", lineHeight:1.8 }}>
-            <p><strong style={{ color:"var(--text)" }}>Kerättävät tiedot</strong><br/>Tallennamme Google-tilisi nimen, sähköpostin ja profiilikuvan. Lisäksi laitteen yleisiä tietoja.</p>
+            <p><strong style={{ color:"var(--text)" }}>Kerättävät tiedot</strong><br/>Tallennamme Google-tilisi nimen, sähköpostin ja profiilikuvan. Lisäksi laitteen yleisiä tietoja ja mahdollisesti liitetyt ulkoiset palvelut.</p>
             <p><strong style={{ color:"var(--text)" }}>Tietojen käyttö</strong><br/>Tietoja käytetään vain sovelluksen toimintaan. Tietoja ei myydä ulkopuolisille.</p>
+            <p><strong style={{ color: "var(--text)"}}>Tietojen säilytys</strong><br />Tietoja säilytetään vain niin kauan kuin on tarpeen sovelluksen toiminnan kannalta.</p>
             <p><strong style={{ color:"var(--text)" }}>Oikeutesi</strong><br/>Voit poistaa tilisi ja tietosi koska tahansa profiiliasetuksista.</p>
           </div>
         )}

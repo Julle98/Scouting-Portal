@@ -14,6 +14,7 @@ import { getApp } from "firebase/app"
 import EmojiPicker from "emoji-picker-react"
 import { Avatar } from "../components/ui/Avatar"
 import { useLinkWarning, LinkWarningModal, TextWithLinks } from "../components/ui/LinkWarning"
+import { isDriveLinked, getDriveInfo, listDriveFiles } from "../services/googleDriveService"
 
 const GIPHY_KEY = import.meta.env.VITE_GIPHY_API_KEY;
 const QUICK_REACTIONS = ["👍","❤️","😂","🔥","🎉","😎"]
@@ -110,6 +111,13 @@ export default function ChatPage() {
   const [loadingDmUsers, setLoadingDmUsers] = useState(true)
   const [loadingEquipmentChats, setLoadingEquipmentChats] = useState(true)
   const [loadingInviteStatuses, setLoadingInviteStatuses] = useState(false)
+  // Google Drive modal
+  const [driveLinked, setDriveLinked] = useState(false)
+  const [driveInfo, setDriveInfo] = useState(null)
+  const [driveFiles, setDriveFiles] = useState([])
+  const [loadingDrive, setLoadingDrive] = useState(false)
+  const [showDriveModal, setShowDriveModal] = useState(false)
+  const [pendingDriveFiles, setPendingDriveFiles] = useState([])
   // DM settings
   const [dmSettings, setDmSettings]   = useState(false)
   const [dmNotes, setDmNotes]         = useState(() => {
@@ -782,7 +790,7 @@ export default function ChatPage() {
 
   async function sendMessage(gifUrl=pendingGif?.url||null, gifPreview=pendingGif?.preview||null) {
     const t = text.trim()
-    if (!t && !gifUrl && pendingFiles.length===0) return
+    if (!t && !gifUrl && pendingFiles.length===0 && pendingDriveFiles.length===0) return
     if (!activeChannel && !activeDm) return
     if (activeDm?.isEquipmentChat && activeDm?.closedAt) return
 
@@ -801,6 +809,15 @@ export default function ChatPage() {
 
     let attachments = []
     if (pendingFiles.length>0) attachments = await uploadFiles(pendingFiles)
+    if (pendingDriveFiles.length>0) {
+      attachments = [...attachments, ...pendingDriveFiles.map(f => ({
+        url: f.url,
+        name: f.name,
+        type: f.type,
+        size: f.size || 0,
+        source: "google-drive",
+      }))]
+    }
 
     const payload = {
       text:t, gifUrl, gifPreview, attachments,
@@ -814,7 +831,7 @@ export default function ChatPage() {
       await updateDoc(doc(db,"directMessages",activeDm.id),{lastMessage:t||(gifUrl?"GIF":"Liite"),lastMessageAt:serverTimestamp()})
     }
     clearTypingIndicator()
-    setText(""); setPendingGif(null); setPendingFiles([]); setReplyTo(null)
+    setText(""); setPendingGif(null); setPendingFiles([]); setPendingDriveFiles([]); setReplyTo(null)
     setShowEmoji(false); setShowGif(false)
     setLastSentAt(Date.now())
     if (slowSec>0) setSlowModeLeft(slowSec)
@@ -1400,6 +1417,31 @@ export default function ChatPage() {
     setShowChannelInfo(true)
   }
 
+  // Tarkista Google Drive -linkitys
+  useEffect(() => {
+    setDriveLinked(isDriveLinked())
+    const info = getDriveInfo()
+    if (info) setDriveInfo(info)
+  }, [])
+
+  // Lataa Google Drive -tiedostot
+  async function loadDriveFiles() {
+    setLoadingDrive(true)
+    try {
+      const token = localStorage.getItem("google_drive_token")
+      if (!token) {
+        pushNotif("error", "Drive-token puuttuu. Linkitä Drive profiilissa.")
+        return
+      }
+      const files = await listDriveFiles(token, 15)
+      setDriveFiles(files)
+    } catch (err) {
+      pushNotif("error", "Tiedostojen lataus epäonnistui: " + err.message)
+    } finally {
+      setLoadingDrive(false)
+    }
+  }
+
   function formatTime(ts) { if (!ts) return ""; const d=ts.toDate?ts.toDate():new Date(ts); return d.toLocaleTimeString("fi-FI",{hour:"2-digit",minute:"2-digit"}) }
   function formatDate(ts) { if (!ts) return ""; const d=ts.toDate?ts.toDate():new Date(ts); return d.toLocaleDateString("fi-FI") }
   function formatChatDayLabel(ts) {
@@ -1427,7 +1469,7 @@ export default function ChatPage() {
   const creatorUser = activeChannel ? allUsers.find(u=>u.id===activeChannel.createdBy) : null
   const charsLeft = MAX_MSG_LENGTH - text.length
   const slowMode = activeChannel?.slowMode||0
-  const canSend = !activeDm?.closedAt && (text.trim().length>0||pendingGif||pendingFiles.length>0)
+  const canSend = !activeDm?.closedAt && (text.trim().length>0||pendingGif||pendingFiles.length>0||pendingDriveFiles.length>0)
   const visibleDmUsers = allUsers.filter(u2=>u2.id!==user.uid&&!hiddenDmUsers[u2.id])
   const inviteCandidates = activeChannel
     ? allUsers.filter(u2 => u2.id !== user.uid && !activeChannel.members?.includes(u2.id))
@@ -1918,12 +1960,17 @@ export default function ChatPage() {
                               )}
                               {msg.gifUrl&&<img src={msg.gifUrl} alt="GIF" style={{maxWidth:280,borderRadius:8,marginTop:4,display:"block"}}/>}
                               {msg.attachments?.map((a,idx)=>(
-                                a.type?.startsWith("image/")
-                                  ? <img key={idx} src={a.url} alt={a.name} style={{maxWidth:300,borderRadius:8,marginTop:4,display:"block",cursor:"pointer"}} onClick={()=>window.open(a.url,"_blank")}/>
-                                  : <a key={idx} href={a.url} target="_blank" rel="noreferrer"
-                                      style={{display:"inline-flex",alignItems:"center",gap:6,marginTop:4,background:"rgba(79,126,247,0.1)",border:"1px solid rgba(79,126,247,0.2)",borderRadius:8,padding:"6px 10px",color:"#4f7ef7",fontSize:12,textDecoration:"none"}}>
-                                      📎 {a.name} <span style={{color:"var(--text3)"}}>({formatFileSize(a.size)})</span>
+                                a.source === "google-drive"
+                                  ? <a key={idx} href={a.url} target="_blank" rel="noreferrer"
+                                      style={{display:"inline-flex",alignItems:"center",gap:6,marginTop:4,background:"rgba(34,197,94,0.1)",border:"1px solid rgba(34,197,94,0.25)",borderRadius:8,padding:"6px 10px",color:"#22c55e",fontSize:12,textDecoration:"none"}}>
+                                      📂 {a.name} <span style={{color:"var(--text3)"}}>(Drive)</span>
                                     </a>
+                                  : a.type?.startsWith("image/")
+                                    ? <img key={idx} src={a.url} alt={a.name} style={{maxWidth:300,borderRadius:8,marginTop:4,display:"block",cursor:"pointer"}} onClick={()=>window.open(a.url,"_blank")}/>
+                                    : <a key={idx} href={a.url} target="_blank" rel="noreferrer"
+                                        style={{display:"inline-flex",alignItems:"center",gap:6,marginTop:4,background:"rgba(79,126,247,0.1)",border:"1px solid rgba(79,126,247,0.2)",borderRadius:8,padding:"6px 10px",color:"#4f7ef7",fontSize:12,textDecoration:"none"}}>
+                                        📎 {a.name} <span style={{color:"var(--text3)"}}>({formatFileSize(a.size)})</span>
+                                      </a>
                               ))}
                             </>
                       }
@@ -1980,6 +2027,18 @@ export default function ChatPage() {
                   <div key={i} style={{display:"flex",alignItems:"center",gap:5,background:"rgba(79,126,247,0.1)",border:"1px solid rgba(79,126,247,0.2)",borderRadius:6,padding:"3px 8px"}}>
                     <span style={{fontSize:12,color:"#4f7ef7"}}>{f.type?.startsWith("image/")?"🖼️":"📎"} {f.name}</span>
                     <button onClick={()=>setPendingFiles(prev=>prev.filter((_,j)=>j!==i))} style={{...iconBtn,fontSize:12,padding:"0 2px"}}>✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Drive-liitteet */}
+            {pendingDriveFiles.length>0&&(
+              <div style={{margin:"0 20px",background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:"8px 8px 0 0",padding:"8px 12px",display:"flex",gap:8,flexWrap:"wrap"}} onClick={e=>e.stopPropagation()}>
+                {pendingDriveFiles.map((f,i)=>(
+                  <div key={`${f.id || f.url}-${i}`} style={{display:"flex",alignItems:"center",gap:5,background:"rgba(34,197,94,0.1)",border:"1px solid rgba(34,197,94,0.25)",borderRadius:6,padding:"3px 8px"}}>
+                    <span style={{fontSize:12,color:"#22c55e"}}>📂 {f.name}</span>
+                    <button onClick={()=>setPendingDriveFiles(prev=>prev.filter((_,j)=>j!==i))} style={{...iconBtn,fontSize:12,padding:"0 2px"}}>✕</button>
                   </div>
                 ))}
               </div>
@@ -2116,7 +2175,7 @@ export default function ChatPage() {
                   {showAttach&&(
                     <div style={{position:"absolute",bottom:36,left:0,background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:10,padding:6,minWidth:170,zIndex:10,boxShadow:"0 8px 24px rgba(0,0,0,0.5)"}}>
                       <div onClick={()=>{fileInputRef.current?.click();setShowAttach(false)}} style={{padding:"7px 12px",cursor:"pointer",fontSize:13,color:"var(--text)",borderRadius:6,display:"flex",alignItems:"center",gap:8}}>💻 Tietokoneelta</div>
-                      <div onClick={()=>{openLink("https://drive.google.com");setShowAttach(false)}} style={{padding:"7px 12px",cursor:"pointer",fontSize:13,color:"var(--text)",borderRadius:6,display:"flex",alignItems:"center",gap:8}}>▲ Google Drive</div>
+                      <div onClick={()=>{if(driveLinked) {setShowDriveModal(true); loadDriveFiles()} else pushNotif("info", "Linkitä Google Drive profiilissa ensin"); setShowAttach(false)}} style={{padding:"7px 12px",cursor:"pointer",fontSize:13,color:driveLinked?"var(--text)":"var(--text3)",borderRadius:6,display:"flex",alignItems:"center",gap:8}}>📂 Google Drive {!driveLinked&&"(ei linkitetty)"}</div>
                     </div>
                   )}
                 </div>
@@ -2836,6 +2895,76 @@ export default function ChatPage() {
       )}
 
       <LinkWarningModal pending={linkPending} onClose={closeLink}/>
+
+      {/* Google Drive Modal */}
+      {showDriveModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 250 }}
+          onClick={() => setShowDriveModal(false)}>
+          <div style={{ background: "var(--bg2)", border: "1px solid var(--border2)", borderRadius: 16, padding: 24, width: 520, maxWidth: "90vw", maxHeight: "80vh", overflowY: "auto" }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+              <h3 style={{ margin: 0, fontSize: 16 }}>📂 Google Drive - Tiedostot</h3>
+              <button onClick={() => setShowDriveModal(false)}
+                style={{ background: "transparent", border: "none", color: "var(--text2)", cursor: "pointer", fontSize: 20 }}>✕</button>
+            </div>
+
+            {driveInfo && (
+              <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid var(--border)" }}>
+                👤 {driveInfo.name}
+              </div>
+            )}
+
+            {driveFiles.length === 0 ? (
+              <button onClick={loadDriveFiles} disabled={loadingDrive}
+                style={{ width: "100%", padding: "10px", background: "#4f7ef7", border: "none", borderRadius: 8, color: "#fff", cursor: "pointer", fontSize: 13, opacity: loadingDrive ? 0.7 : 1, fontFamily: "system-ui" }}>
+                {loadingDrive ? "Ladataan..." : "📥 Lataa tiedostot"}
+              </button>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {driveFiles.map(file => (
+                  <div key={file.id} style={{ padding: 10, background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 8, display: "flex", alignItems: "start", gap: 10 }}>
+                    <span style={{ fontSize: 16, marginTop: 2 }}>
+                      {file.mimeType.includes("folder") ? "📁" : file.mimeType.includes("image") ? "🖼️" : file.mimeType.includes("sheet") ? "📊" : file.mimeType.includes("document") ? "📄" : "📎"}
+                    </span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <a href={file.webViewLink} target="_blank" rel="noopener noreferrer"
+                        style={{ fontSize: 13, color: "#4f7ef7", textDecoration: "none", wordBreak: "break-word" }}>
+                        {file.name}
+                      </a>
+                      <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 2 }}>
+                        {new Date(file.modifiedTime).toLocaleDateString("fi-FI")}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setPendingDriveFiles(prev => {
+                          if (prev.some(p => p.id === file.id)) return prev
+                          return [...prev, {
+                            id: file.id,
+                            name: file.name,
+                            url: file.webViewLink,
+                            type: file.mimeType || "application/octet-stream",
+                            size: Number(file.size || 0),
+                          }]
+                        })
+                        pushNotif("success", `Drive-tiedosto lisätty liitteeksi: ${file.name}`)
+                        setShowDriveModal(false)
+                      }}
+                      style={{ background:"rgba(34,197,94,0.15)", border:"1px solid rgba(34,197,94,0.35)", borderRadius:8, color:"#22c55e", cursor:"pointer", fontSize:12, padding:"6px 10px", fontFamily:"system-ui", whiteSpace:"nowrap" }}>
+                      Liitä viestiin
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button onClick={() => setShowDriveModal(false)}
+              style={{ width: "100%", marginTop: 16, padding: "9px", background: "#4f7ef7", border: "none", borderRadius: 8, color: "#fff", fontSize: 13, cursor: "pointer", fontFamily: "system-ui" }}>
+              Sulje
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Chat-ilmoitukset */}
       <div style={{position:"fixed",bottom:24,right:24,display:"flex",flexDirection:"column",gap:8,zIndex:300,pointerEvents:"none"}}>

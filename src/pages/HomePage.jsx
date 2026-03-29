@@ -200,8 +200,9 @@ export default function HomePage() {
               </div>
             ) : (
               <div style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.8 }}>
-                <p><strong style={{ color: "var(--text)" }}>Kerättävät tiedot</strong><br />Tallennamme Google-tilisi nimen, sähköpostin ja profiilikuvan. Lisäksi laitteen yleisiä tietoja.</p>
+                <p><strong style={{ color: "var(--text)" }}>Kerättävät tiedot</strong><br />Tallennamme Google-tilisi nimen, sähköpostin ja profiilikuvan. Lisäksi laitteen yleisiä tietoja ja mahdollisesti liitetyt ulkoiset palvelut.</p>
                 <p><strong style={{ color: "var(--text)" }}>Tietojen käyttö</strong><br />Tietoja käytetään vain sovelluksen toimintaan. Tietoja ei myydä ulkopuolisille.</p>
+                <p><strong style={{ color: "var(--text)" }}>Tietojen säilytys</strong><br />Tietoja säilytetään vain niin kauan kuin on tarpeen sovelluksen toiminnan kannalta.</p>
                 <p><strong style={{ color: "var(--text)" }}>Oikeutesi</strong><br />Voit poistaa tilisi ja tietosi koska tahansa profiiliasetuksista.</p>
               </div>
             )}

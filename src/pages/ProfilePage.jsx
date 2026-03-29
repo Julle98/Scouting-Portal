@@ -5,6 +5,7 @@ import { db, auth } from "../services/firebase"
 import { doc, updateDoc, serverTimestamp, getDoc, addDoc, collection, deleteField } from "firebase/firestore"
 import { deleteUser, GoogleAuthProvider, linkWithPopup, EmailAuthProvider, linkWithCredential, updatePassword, reauthenticateWithCredential, reauthenticateWithPopup } from "firebase/auth"
 import { Avatar } from "../components/ui/Avatar"
+import { linkGoogleDrive, unlinkGoogleDrive, isDriveLinked, getDriveInfo, listDriveFiles } from "../services/googleDriveService"
 
 const STATUS_OPTIONS = [
   { value:"online",  label:"🟢 Paikalla",     color:"#22c55e" },
@@ -34,6 +35,11 @@ export default function ProfilePage({ onSaved }) {
   const [accountErr, setAccountErr] = useState("")
   const [delConfirm, setDelConfirm] = useState("")
   const [downloading, setDownloading] = useState(false)
+  const [driveLinked, setDriveLinked] = useState(false)
+  const [driveInfo, setDriveInfo] = useState(null)
+  const [driveFiles, setDriveFiles] = useState([])
+  const [loadingDrive, setLoadingDrive] = useState(false)
+  const [showDriveModal, setShowDriveModal] = useState(false)
 
   useEffect(() => {
     if (!profile) return
@@ -45,6 +51,13 @@ export default function ProfilePage({ onSaved }) {
       status:      profile.status      || "online",
     })
   }, [profile])
+
+  // Tarkista Drive-linkitys
+  useEffect(() => {
+    setDriveLinked(isDriveLinked())
+    const info = getDriveInfo()
+    if (info) setDriveInfo(info)
+  }, [])
 
   async function save() {
     setSaving(true)
@@ -134,6 +147,49 @@ export default function ProfilePage({ onSaved }) {
       URL.revokeObjectURL(a.href)
     } catch (err) { setAccountErr(err.message) }
     setDownloading(false)
+  }
+
+  // Linkitä Google Drive
+  async function handleDriveLink() {
+    try {
+      const result = await linkGoogleDrive(user)
+      if (result.success) {
+        setDriveLinked(true)
+        setDriveInfo(result.info)
+        window.__pushToast?.(result.message, "success")
+      } else {
+        setAccountErr(result.message)
+      }
+    } catch (err) {
+      setAccountErr("Drive-linkitys epäonnistui: " + err.message)
+    }
+  }
+
+  // Irroita Google Drive
+  function handleDriveUnlink() {
+    const result = unlinkGoogleDrive()
+    setDriveLinked(false)
+    setDriveInfo(null)
+    setDriveFiles([])
+    window.__pushToast?.(result.message, "success")
+  }
+
+  // Lataa Drive-tiedostot
+  async function loadDriveFiles() {
+    setLoadingDrive(true)
+    try {
+      const token = localStorage.getItem("google_drive_token")
+      if (!token) {
+        setAccountErr("Drive-token puuttuu. Linkitä Drive uudelleen.")
+        return
+      }
+      const files = await listDriveFiles(token, 15)
+      setDriveFiles(files)
+    } catch (err) {
+      setAccountErr("Tiedostojen lataus epäonnistui: " + err.message)
+    } finally {
+      setLoadingDrive(false)
+    }
   }
 
   // Poista käyttäjätili
@@ -346,6 +402,36 @@ export default function ProfilePage({ onSaved }) {
               </div>
             )}
 
+
+            {/* Ulkoiset sovellukset */}
+            <div style={{ background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:14, padding:20 }}>
+              <div style={{ fontSize:14, fontWeight:500, marginBottom:14 }}>Ulkoiset sovellukset</div>
+              
+              {/* Google Drive */}
+              <div style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", background:"var(--bg3)", borderRadius:10, marginBottom:8 }}>
+                <span style={{ fontSize:20 }}>🔗</span>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:13, fontWeight:500 }}>Google Drive</div>
+                  <div style={{ fontSize:11, color:"var(--text3)" }}>{driveInfo?.email || "Yhdistä Google-tilillesi"}</div>
+                </div>
+                {driveLinked
+                  ? <span style={{ fontSize:11, color:"#22c55e", background:"rgba(34,197,94,0.12)", padding:"2px 8px", borderRadius:5 }}>✓ Yhdistetty</span>
+                  : <span style={{ fontSize:11, color:"#f59e0b", background:"rgba(245,158,11,0.12)", padding:"2px 8px", borderRadius:5 }}>✗ Ei yhdistetty</span>
+                }
+              </div>
+              {driveLinked ? (
+                <>
+                  <button onClick={handleDriveUnlink} style={{ ...btnSecondary, width:"100%", padding:"9px" }}>
+                    🔓 Irrota Drive
+                  </button>
+                </>
+              ) : (
+                <button onClick={handleDriveLink} style={{ ...btnPrimary, width:"100%", padding:"9px" }}>
+                  ✚ Yhdistä Google Drive
+                </button>
+              )}
+            </div>
+
             <div style={{ background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:14, padding:20 }}>
               <div style={{ fontSize:14, fontWeight:500, marginBottom:8 }}>Aktiiviset sessiot</div>
               {profile?.sessions && Object.keys(profile.sessions).length > 0 ? (
@@ -369,6 +455,59 @@ export default function ProfilePage({ onSaved }) {
             </div>
           </div>
         )}
+
+        {/* Google Drive -selain modal */}
+        {showDriveModal && (
+          <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:250 }}
+            onClick={() => setShowDriveModal(false)}>
+            <div style={{ background:"var(--bg2)", border:"1px solid var(--border2)", borderRadius:16, padding:24, width:520, maxWidth:"90vw", maxHeight:"80vh", overflowY:"auto" }}
+              onClick={e => e.stopPropagation()}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
+                <h3 style={{ margin:0, fontSize:16 }}>📂 Google Drive - Tiedostot</h3>
+                <button onClick={() => setShowDriveModal(false)}
+                  style={{ background:"transparent", border:"none", color:"var(--text2)", cursor:"pointer", fontSize:20 }}>✕</button>
+              </div>
+
+              {driveInfo && (
+                <div style={{ fontSize:12, color:"var(--text3)", marginBottom:12, paddingBottom:12, borderBottom:"1px solid var(--border)" }}>
+                  👤 {driveInfo.name}
+                </div>
+              )}
+
+              {driveFiles.length === 0 ? (
+                <button onClick={loadDriveFiles} disabled={loadingDrive}
+                  style={{ width:"100%", padding:"10px", background:"#4f7ef7", border:"none", borderRadius:8, color:"#fff", cursor:"pointer", fontSize:13, opacity:loadingDrive?0.7:1 }}>
+                  {loadingDrive ? "Ladataan..." : "📥 Lataa tiedostot"}
+                </button>
+              ) : (
+                <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                  {driveFiles.map(file => (
+                    <div key={file.id} style={{ padding:10, background:"var(--bg3)", border:"1px solid var(--border)", borderRadius:8, display:"flex", alignItems:"start", gap:10 }}>
+                      <span style={{ fontSize:16, marginTop:2 }}>
+                        {file.mimeType.includes("folder") ? "📁" : file.mimeType.includes("image") ? "🖼️" : file.mimeType.includes("sheet") ? "📊" : file.mimeType.includes("document") ? "📄" : "📎"}
+                      </span>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <a href={file.webViewLink} target="_blank" rel="noopener noreferrer"
+                          style={{ fontSize:13, color:"#4f7ef7", textDecoration:"none", wordBreak:"break-word" }}>
+                          {file.name}
+                        </a>
+                        <div style={{ fontSize:11, color:"var(--text3)", marginTop:2 }}>
+                          {new Date(file.modifiedTime).toLocaleDateString("fi-FI")}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <button onClick={() => setShowDriveModal(false)}
+                style={{ width:"100%", marginTop:16, padding:"9px", background:"#4f7ef7", border:"none", borderRadius:8, color:"#fff", fontSize:13, cursor:"pointer" }}>
+                Sulje
+              </button>
+            </div>
+          </div>
+        )}
+
 
         {/* ── Tilin hallinta ── */}
         {section === "manage" && (
@@ -429,14 +568,15 @@ export default function ProfilePage({ onSaved }) {
           <h3 style={{ margin:"0 0 16px", fontSize:16 }}>{showTermsModal==="terms" ? "📋 Käyttöehdot" : "🔐 Tietosuojakäytäntö"}</h3>
           {showTermsModal === "terms" ? (
             <div style={{ fontSize:13, color:"var(--text2)", lineHeight:1.8 }}>
-              <p><strong style={{ color:"var(--text)" }}>1. Sovelluksen käyttö</strong><br/>Partio-portaali on tarkoitettu Maahiset-lippukunnan johtajien sisäiseen käyttöön.</p>
+              <p><strong style={{ color:"var(--text)" }}>1. Sovelluksen käyttö</strong><br/>Maahiset-portaali on tarkoitettu Maahiset-lippukunnan johtajien sisäiseen käyttöön.</p>
               <p><strong style={{ color:"var(--text)" }}>2. Käyttäytyminen</strong><br/>Käyttäjät sitoutuvat asialliseen käytökseen. Häirintä tai asiattomat viestit voivat johtaa käyttöoikeuden poistoon.</p>
               <p><strong style={{ color:"var(--text)" }}>3. Sisältö</strong><br/>Käyttäjä vastaa lähettämästään sisällöstä. Laitonta sisältöä ei sallita.</p>
             </div>
           ) : (
             <div style={{ fontSize:13, color:"var(--text2)", lineHeight:1.8 }}>
-              <p><strong style={{ color:"var(--text)" }}>Kerättävät tiedot</strong><br/>Tallennamme Google-tilisi nimen, sähköpostin ja profiilikuvan. Lisäksi laitteen yleisiä tietoja.</p>
+              <p><strong style={{ color:"var(--text)" }}>Kerättävät tiedot</strong><br/>Tallennamme Google-tilisi nimen, sähköpostin ja profiilikuvan. Lisäksi laitteen yleisiä tietoja ja mahdollisesti liitetyt ulkoiset palvelut.</p>
               <p><strong style={{ color:"var(--text)" }}>Tietojen käyttö</strong><br/>Tietoja käytetään vain sovelluksen toimintaan. Tietoja ei myydä ulkopuolisille.</p>
+              <p><strong style={{ color: "var(--text)"}}>Tietojen säilytys</strong><br />Tietoja säilytetään vain niin kauan kuin on tarpeen sovelluksen toiminnan kannalta.</p>
               <p><strong style={{ color:"var(--text)" }}>Oikeutesi</strong><br/>Voit poistaa tilisi ja tietosi koska tahansa profiiliasetuksista.</p>
             </div>
           )}
