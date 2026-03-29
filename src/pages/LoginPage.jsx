@@ -107,6 +107,11 @@ export default function LoginPage({ initialLegal = null }) {
     if (typeof window === "undefined") return false
     return sessionStorage.getItem("humanVerified") === "1"
   })
+  const [captchaInfo, setCaptchaInfo] = useState(() =>
+    typeof window !== "undefined" && sessionStorage.getItem("humanVerified") === "1"
+      ? "Recaptcha vahvistettu, voit kirjautua normaalisti sisään ✓"
+      : ""
+  )
   const captchaContainerRef = useRef(null)
   const captchaWidgetIdRef = useRef(null)
   const isLegalRoute = location.pathname === "/kayttoehdot" || location.pathname === "/tietosuoja"
@@ -153,12 +158,14 @@ export default function LoginPage({ initialLegal = null }) {
             if (!token || cancelled) return
             setHumanVerified(true)
             setCaptchaError("")
+            setCaptchaInfo("Recaptcha vahvistettu, voit kirjautua normaalisti sisään ✓")
             if (typeof window !== "undefined") sessionStorage.setItem("humanVerified", "1")
           },
           onExpired: () => {
             if (!cancelled) {
               setHumanVerified(false)
               setCaptchaError("reCAPTCHA vanheni, vahvista uudelleen.")
+              setCaptchaInfo("")
               if (typeof window !== "undefined") sessionStorage.removeItem("humanVerified")
             }
           },
@@ -184,6 +191,7 @@ export default function LoginPage({ initialLegal = null }) {
         captchaSiteKey={RECAPTCHA_SITE_KEY}
         onCaptchaVerified={() => {
           setHumanVerified(true)
+          setCaptchaInfo("Recaptcha vahvistettu, voit kirjautua normaalisti sisään ✓")
           if (typeof window !== "undefined") sessionStorage.setItem("humanVerified", "1")
         }}
       />
@@ -334,6 +342,10 @@ export default function LoginPage({ initialLegal = null }) {
             </div>
           )}
 
+          {RECAPTCHA_SITE_KEY && !isLegalRoute && humanVerified && captchaInfo && (
+            <div style={{ ...s.infoBox, marginTop: 16 }}>{captchaInfo}</div>
+          )}
+
           {!RECAPTCHA_SITE_KEY && !isLegalRoute && (
             <div style={{ ...s.errBox, marginTop: 16 }}>
               reCAPTCHA ei ole kaytossa: VITE_RECAPTCHA_SITE_KEY puuttuu.
@@ -427,7 +439,7 @@ export default function LoginPage({ initialLegal = null }) {
         </div>
 
         <div style={s.legalDock}>
-          <div style={{ display:"flex", justifyContent:"center", gap:8, flexWrap:"wrap" }}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
             <Link to={TERMS_URL} style={s.legalBtn}>📋 Käyttöehdot</Link>
             <Link to={PRIVACY_URL} style={s.legalBtn}>🔐 Tietosuojakäytäntö</Link>
           </div>
@@ -454,7 +466,7 @@ const s = {
   stack:     { width:380, maxWidth:"90vw", display:"flex", flexDirection:"column", gap:12 },
   card:      { background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:16, padding:"32px 28px", width:380, maxWidth:"90vw" },
   legalDock: { background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:12, padding:"10px 12px" },
-  legalBtn:  { fontSize:12, color:"#4f7ef7", textDecoration:"none", border:"1px solid rgba(79,126,247,0.25)", background:"rgba(79,126,247,0.08)", borderRadius:999, padding:"5px 10px" },
+  legalBtn:  { fontSize:12, color:"#4f7ef7", textDecoration:"none", border:"1px solid rgba(79,126,247,0.25)", background:"rgba(79,126,247,0.08)", borderRadius:999, padding:"6px 10px", display:"flex", alignItems:"center", justifyContent:"center", minHeight:30, textAlign:"center" },
   googleBtn: { width:"100%", padding:"12px", background:"#fff", color:"#333", border:"none", borderRadius:10, fontSize:14, fontWeight:500, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:10, fontFamily:"system-ui" },
   lbl:       { display:"block", fontSize:12, fontWeight:500, color:"var(--text2)", marginBottom:6, marginTop:12 },
   inp:       { width:"100%", background:"var(--bg3)", border:"1px solid var(--border2)", borderRadius:8, padding:"9px 12px", color:"var(--text)", fontSize:14, boxSizing:"border-box", fontFamily:"system-ui", outline:"none" },
