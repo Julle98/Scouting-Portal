@@ -148,12 +148,26 @@ export default function ChatPage() {
   const [pinnedItems, setPinnedItems] = useState(() => { try { return JSON.parse(localStorage.getItem("pinnedItems") || "{}") } catch { return {} } })
   const [hiddenDmUsers, setHiddenDmUsers] = useState(() => { try { return JSON.parse(localStorage.getItem("hiddenDmUsers") || "{}") } catch { return {} } })
   const [sidebarWidth, setSidebarWidth] = useState(() => { const s = parseInt(localStorage.getItem("sidebarWidth")); return isNaN(s) ? 220 : Math.max(160, Math.min(480, s)) })
+  const [dmSettingsWidth, setDmSettingsWidth] = useState(() => {
+    const s = parseInt(localStorage.getItem("dmSettingsWidth"))
+    return isNaN(s) ? 240 : Math.max(180, Math.min(460, s))
+  })
+  const [membersPanelWidth, setMembersPanelWidth] = useState(() => {
+    const s = parseInt(localStorage.getItem("membersPanelWidth"))
+    return isNaN(s) ? 220 : Math.max(180, Math.min(420, s))
+  })
   const [hiddenNotes, setHiddenNotes] = useState(() => localStorage.getItem("hiddenNotes") === "true")
   const [frequentEmojiUsage, setFrequentEmojiUsage] = useState(() => loadFrequentEmojis())
   const [emojiPickerTheme, setEmojiPickerTheme] = useState("dark")
+  const [editingProfileNote, setEditingProfileNote] = useState(false)
+  const [profileNoteDraft, setProfileNoteDraft] = useState("")
   const sidebarDragRef = useRef(false)
   const sidebarDragStartXRef = useRef(0)
   const sidebarDragStartWRef = useRef(0)
+  const rightPanelDragRef = useRef(false)
+  const rightPanelDragTargetRef = useRef("")
+  const rightPanelDragStartXRef = useRef(0)
+  const rightPanelDragStartWRef = useRef(0)
   const messagesEndRef = useRef(null)
   const gifSearchTimer = useRef(null)
   const fileInputRef   = useRef(null)
@@ -581,6 +595,14 @@ export default function ChatPage() {
   }, [sidebarWidth])
 
   useEffect(() => {
+    try { localStorage.setItem("dmSettingsWidth", String(dmSettingsWidth)) } catch {}
+  }, [dmSettingsWidth])
+
+  useEffect(() => {
+    try { localStorage.setItem("membersPanelWidth", String(membersPanelWidth)) } catch {}
+  }, [membersPanelWidth])
+
+  useEffect(() => {
     try {
       const parsed = JSON.parse(localStorage.getItem(dmNotesStorageKey) || "{}")
       setDmNotes(parsed && typeof parsed === "object" ? parsed : {})
@@ -593,16 +615,41 @@ export default function ChatPage() {
     try { localStorage.setItem(dmNotesStorageKey, JSON.stringify(dmNotes)) } catch {}
   }, [dmNotes, dmNotesStorageKey])
 
+  useEffect(() => {
+    if (!profileModal?.id || !user?.uid) {
+      setEditingProfileNote(false)
+      setProfileNoteDraft("")
+      return
+    }
+    const noteKey = [user.uid, profileModal.id].sort().join("_")
+    setProfileNoteDraft(dmNotes[noteKey] || "")
+    setEditingProfileNote(false)
+  }, [profileModal?.id, user?.uid])
+
   // Sivupalkin vedettävyys
   useEffect(() => {
     function onMouseMove(e) {
-      if (!sidebarDragRef.current) return
-      const delta = e.clientX - sidebarDragStartXRef.current
-      const newW = Math.max(160, Math.min(480, sidebarDragStartWRef.current + delta))
-      setSidebarWidth(newW)
+      if (sidebarDragRef.current) {
+        const delta = e.clientX - sidebarDragStartXRef.current
+        const newW = Math.max(160, Math.min(480, sidebarDragStartWRef.current + delta))
+        setSidebarWidth(newW)
+        return
+      }
+      if (!rightPanelDragRef.current) return
+      const delta = rightPanelDragStartXRef.current - e.clientX
+      const target = rightPanelDragTargetRef.current
+      if (target === "dm") {
+        const newW = Math.max(180, Math.min(460, rightPanelDragStartWRef.current + delta))
+        setDmSettingsWidth(newW)
+      } else if (target === "members") {
+        const newW = Math.max(180, Math.min(420, rightPanelDragStartWRef.current + delta))
+        setMembersPanelWidth(newW)
+      }
     }
     function onMouseUp() {
       sidebarDragRef.current = false
+      rightPanelDragRef.current = false
+      rightPanelDragTargetRef.current = ""
       document.body.style.cursor = ""
       document.body.style.userSelect = ""
     }
@@ -646,6 +693,25 @@ export default function ChatPage() {
     setTimeout(()=>setNotifications(prev=>prev.filter(n=>n.id!==id)),5000)
   }
 
+  function resolveUserProfile(userLike) {
+    if (!userLike?.id) return null
+    return allUsers.find(u => u.id === userLike.id) || userLike
+  }
+
+  function openProfile(userLike) {
+    const fullUser = resolveUserProfile(userLike)
+    if (!fullUser) return
+    setProfileModal(fullUser)
+  }
+
+  function filterUnsupportedLocalFiles(files) {
+    const imageFiles = files.filter(file => file.type?.startsWith("image/"))
+    if (imageFiles.length > 0) {
+      pushNotif("info", "Kuvia ei ole vielä tuettu")
+    }
+    return files.filter(file => !file.type?.startsWith("image/"))
+  }
+
   async function fetchGifs(q, append = false) {
     setGifLoading(true)
     try {
@@ -670,9 +736,11 @@ export default function ChatPage() {
 
   async function uploadFiles(files) {
     if (!storage) { alert("Firebase Storage ei ole käytössä."); return [] }
+    const uploadableFiles = filterUnsupportedLocalFiles(files)
+    if (uploadableFiles.length === 0) return []
     setUploading(true)
     const urls = []
-    for (const file of files) {
+    for (const file of uploadableFiles) {
       const sRef = storageRef(storage,`messages/${user.uid}/${Date.now()}_${file.name}`)
       await new Promise((res,rej) => {
         const task = uploadBytesResumable(sRef,file)
@@ -808,7 +876,13 @@ export default function ChatPage() {
     }
 
     let attachments = []
-    if (pendingFiles.length>0) attachments = await uploadFiles(pendingFiles)
+    if (pendingFiles.length>0) {
+      const uploadableFiles = pendingFiles.filter(file => !file.type?.startsWith("image/"))
+      if (uploadableFiles.length !== pendingFiles.length) {
+        pushNotif("info", "Kuvia ei ole vielä tuettu")
+      }
+      attachments = await uploadFiles(uploadableFiles)
+    }
     if (pendingDriveFiles.length>0) {
       attachments = [...attachments, ...pendingDriveFiles.map(f => ({
         url: f.url,
@@ -1037,7 +1111,7 @@ export default function ChatPage() {
   }
 
   async function sendInvite() {
-    if (!activeChannel || !isChannelAdmin || !inviteTargetUserId) return
+    if (!activeChannel || activeChannel.type === "public" || !isChannelAdmin || !inviteTargetUserId) return
     const targetUser = allUsers.find(u => u.id === inviteTargetUserId)
     if (!targetUser) return
 
@@ -1119,6 +1193,41 @@ export default function ChatPage() {
       })
     } catch {
       return false
+    }
+  }
+
+  function saveProfileNote() {
+    if (!profileModal?.id || !user?.uid) return
+    const noteKey = [user.uid, profileModal.id].sort().join("_")
+    const value = profileNoteDraft.trim()
+    setDmNotes(prev => {
+      const next = { ...prev }
+      if (value) next[noteKey] = value
+      else delete next[noteKey]
+      return next
+    })
+    setEditingProfileNote(false)
+    pushNotif("success", "Muistiinpano tallennettu")
+  }
+
+  async function reportProfileUser() {
+    if (!profileModal?.id || profileModal.id === user.uid) return
+    const reason = window.prompt("Kirjoita raportin syy")
+    if (!reason || !reason.trim()) return
+    try {
+      await addDoc(collection(db,"memberReports"),{
+        targetId:profileModal.id,
+        targetName:profileModal.displayName,
+        reporterId:user.uid,
+        reporterName:profile?.displayName,
+        reason:reason.trim(),
+        status:"pending",
+        createdAt:serverTimestamp(),
+      })
+      setProfileModal(null)
+      pushNotif("success", "Raportti lähetetty")
+    } catch {
+      pushNotif("error", "Raportin lähetys epäonnistui")
     }
   }
 
@@ -1785,7 +1894,7 @@ export default function ChatPage() {
                     </div>
                     <span
                       style={{fontWeight:600,fontSize:14,cursor:"pointer",textDecoration:"underline"}}
-                      onClick={() => activeDm.otherUser && setProfileModal(activeDm.otherUser)}
+                      onClick={() => activeDm.otherUser && openProfile(activeDm.otherUser)}
                       title="Avaa profiili"
                     >
                       {activeDm.otherUser?.displayName}
@@ -1815,7 +1924,7 @@ export default function ChatPage() {
           {activeChannel&&isChannelMuted(activeChannel.id)&&(
             <button onClick={()=>setMutedChannels(prev=>{const n={...prev};delete n[activeChannel.id];return n})} style={{...iconBtn,color:"#f59e0b",fontSize:12}}>🔕</button>
           )}
-          {activeChannel&&isChannelAdmin&&(
+          {activeChannel&&isChannelAdmin&&activeChannel.type!=="public"&&(
             <button onClick={e=>{e.stopPropagation();setShowInvite(true)}} style={iconBtn} title="Kutsu ryhmään">✉️</button>
           )}
           {activeChannel&&(isChannelAdmin || isEquipmentManager)&&(
@@ -2145,7 +2254,7 @@ export default function ChatPage() {
                 </div>
               )}
 
-              <input ref={fileInputRef} type="file" multiple accept="image/*,.pdf,.doc,.docx,.txt,.zip" onChange={e=>{const f=Array.from(e.target.files||[]);if(f.length>0)setPendingFiles(prev=>[...prev,...f]);e.target.value=""}} style={{display:"none"}}/>
+              <input ref={fileInputRef} type="file" multiple accept="image/*,.pdf,.doc,.docx,.txt,.zip" onChange={e=>{const f=Array.from(e.target.files||[]);const allowed=filterUnsupportedLocalFiles(f);if(allowed.length>0)setPendingFiles(prev=>[...prev,...allowed]);e.target.value=""}} style={{display:"none"}}/>
 
               {/* @ mention dropdown */}
               {showMention&&(
@@ -2262,7 +2371,13 @@ export default function ChatPage() {
 
       {/* DM-asetukset */}
       {dmSettings&&activeDm&&!activeDm.isSelfNote&&(
-        <div style={{width:220,background:"var(--bg2)",borderLeft:"1px solid var(--border)",overflowY:"auto",padding:"0 0 16px"}}>
+        <div style={{width:dmSettingsWidth,minWidth:180,maxWidth:460,background:"var(--bg2)",borderLeft:"1px solid var(--border)",overflowY:"auto",padding:"0 0 16px",position:"relative",flexShrink:0}}>
+          <div
+            onMouseDown={e=>{e.preventDefault();rightPanelDragRef.current=true;rightPanelDragTargetRef.current="dm";rightPanelDragStartXRef.current=e.clientX;rightPanelDragStartWRef.current=dmSettingsWidth;document.body.style.cursor="col-resize";document.body.style.userSelect="none"}}
+            style={{position:"absolute",left:0,top:0,bottom:0,width:5,cursor:"col-resize",zIndex:10,background:"transparent",transition:"background 0.15s"}}
+            onMouseEnter={e=>e.currentTarget.style.background="rgba(79,126,247,0.35)"}
+            onMouseLeave={e=>{if(!rightPanelDragRef.current)e.currentTarget.style.background="transparent"}}
+          />
           <div style={{padding:"12px 14px 10px",fontSize:13,fontWeight:600,borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             ⚙️ DM-asetukset
             <button onClick={()=>setDmSettings(false)} style={{...iconBtn,fontSize:14}}>✕</button>
@@ -2328,7 +2443,13 @@ export default function ChatPage() {
 
       {/* Jäsenpaneeli — vain kanavilla */}
       {showMembers&&activeChannel&&(
-        <div style={{width:200,background:"var(--bg2)",borderLeft:"1px solid var(--border)",overflowY:"auto"}}>
+        <div style={{width:membersPanelWidth,minWidth:180,maxWidth:420,background:"var(--bg2)",borderLeft:"1px solid var(--border)",overflowY:"auto",position:"relative",flexShrink:0}}>
+          <div
+            onMouseDown={e=>{e.preventDefault();rightPanelDragRef.current=true;rightPanelDragTargetRef.current="members";rightPanelDragStartXRef.current=e.clientX;rightPanelDragStartWRef.current=membersPanelWidth;document.body.style.cursor="col-resize";document.body.style.userSelect="none"}}
+            style={{position:"absolute",left:0,top:0,bottom:0,width:5,cursor:"col-resize",zIndex:10,background:"transparent",transition:"background 0.15s"}}
+            onMouseEnter={e=>e.currentTarget.style.background="rgba(79,126,247,0.35)"}
+            onMouseLeave={e=>{if(!rightPanelDragRef.current)e.currentTarget.style.background="transparent"}}
+          />
           <div style={{padding:"12px 12px 8px",fontSize:10,fontWeight:600,color:"var(--text3)",textTransform:"uppercase",letterSpacing:"0.08em"}}>
             Jäsenet — {channelMembers.length}
           </div>
@@ -2486,7 +2607,7 @@ export default function ChatPage() {
       {/* Profiili-modal */}
       {profileModal&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200}} onClick={()=>setProfileModal(null)}>
-          <div style={{background:"var(--bg2)",border:"1px solid var(--border2)",borderRadius:16,padding:28,width:340,maxWidth:"90vw",textAlign:"center"}} onClick={e=>e.stopPropagation()}>
+          <div style={{background:"var(--bg2)",border:"1px solid var(--border2)",borderRadius:16,padding:24,width:380,maxWidth:"90vw",textAlign:"center",maxHeight:"85vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
             <div style={{position:"relative",display:"inline-block",marginBottom:14}}>
               <Avatar src={profileModal.photoURL} name={profileModal.displayName} size={68}/>
               <div style={{position:"absolute",bottom:2,right:2,width:14,height:14,borderRadius:"50%",background:statusColor(profileModal),border:"3px solid var(--bg2)"}}/>
@@ -2497,11 +2618,40 @@ export default function ChatPage() {
             <div style={{fontSize:12,color:"var(--text3)",marginBottom:12}}>{profileModal.online?"🟢 Paikalla":`Viimeksi paikalla: ${formatLastSeen(profileModal.lastSeen)}`}</div>
             {profileModal.bio&&<p style={{fontSize:13,color:"var(--text2)",lineHeight:1.6,background:"var(--bg3)",padding:"10px 14px",borderRadius:8,margin:"0 0 14px",textAlign:"left"}}>{profileModal.bio}</p>}
             {profileModal.phone&&<div style={{fontSize:13,color:"var(--text3)",marginBottom:14}}>📞 {profileModal.phone}</div>}
+            {profileModal.id!==user.uid&&(
+              <div style={{textAlign:"left",background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:10,padding:"10px 12px",marginBottom:14}}>
+                <div style={{fontSize:11,fontWeight:600,color:"var(--text3)",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Muistiinpanot</div>
+                {editingProfileNote
+                  ? <>
+                      <textarea
+                        value={profileNoteDraft}
+                        onChange={e=>setProfileNoteDraft(e.target.value)}
+                        rows={4}
+                        placeholder="Kirjoita muistiinpano tästä jäsenestä..."
+                        style={{width:"100%",background:"var(--bg2)",border:"1px solid rgba(79,126,247,0.35)",borderRadius:8,padding:"8px 10px",color:"var(--text)",fontSize:12,fontFamily:"system-ui",resize:"none",outline:"none",boxSizing:"border-box"}}
+                      />
+                      <div style={{display:"flex",gap:6,marginTop:6}}>
+                        <button onClick={saveProfileNote} style={{flex:1,padding:"6px",background:"#4f7ef7",border:"none",borderRadius:6,color:"#fff",fontSize:12,cursor:"pointer",fontFamily:"system-ui"}}>Tallenna</button>
+                        <button onClick={()=>{setEditingProfileNote(false);setProfileNoteDraft(dmNotes[[user.uid, profileModal.id].sort().join("_")] || "")}} style={{padding:"6px 10px",background:"transparent",border:"1px solid var(--border2)",borderRadius:6,color:"var(--text2)",fontSize:12,cursor:"pointer",fontFamily:"system-ui"}}>Peruuta</button>
+                      </div>
+                    </>
+                  : <>
+                      {dmNotes[[user.uid, profileModal.id].sort().join("_")]
+                        ? <div style={{fontSize:12,color:"var(--text2)",lineHeight:1.6,whiteSpace:"pre-wrap",marginBottom:8}}>{dmNotes[[user.uid, profileModal.id].sort().join("_")]}</div>
+                        : <div style={{fontSize:12,color:"var(--text3)",fontStyle:"italic",marginBottom:8}}>Ei muistiinpanoja.</div>
+                      }
+                      <button onClick={()=>setEditingProfileNote(true)} style={{width:"100%",padding:"7px",background:"rgba(79,126,247,0.1)",border:"1px solid rgba(79,126,247,0.25)",borderRadius:7,color:"#4f7ef7",fontSize:12,cursor:"pointer",fontFamily:"system-ui"}}>
+                        ✏️ {dmNotes[[user.uid, profileModal.id].sort().join("_")] ? "Muokkaa" : "Lisää muistiinpano"}
+                      </button>
+                    </>
+                }
+              </div>
+            )}
             <div style={{display:"flex",gap:8,justifyContent:"center"}}>
               <button onClick={()=>setProfileModal(null)} style={btnGhost}>Sulje</button>
               {profileModal.id===user.uid
                 ? <button onClick={()=>{openDM(profileModal);setProfileModal(null)}} style={btnPrimary}>📝 Avaa muistiinpanot</button>
-                : <button onClick={()=>{openDM(profileModal);setProfileModal(null)}} style={btnPrimary}>💬 Lähetä viesti</button>
+                : <button onClick={reportProfileUser} style={{...btnPrimary,background:"rgba(239,68,68,0.15)",border:"1px solid rgba(239,68,68,0.3)",color:"#f87171"}}>🚩 Raportoi</button>
               }
             </div>
           </div>
@@ -2726,7 +2876,10 @@ export default function ChatPage() {
           {!activeChannel && (
             <div style={{fontSize:12,color:"var(--text3)",marginBottom:12}}>Valitse ensin ryhmä, johon haluat kutsua jäsenen.</div>
           )}
-          {activeChannel && (
+          {activeChannel?.type === "public" && (
+            <div style={{fontSize:12,color:"var(--text3)",marginBottom:12}}>Kutsuja ei käytetä julkisissa ryhmissä.</div>
+          )}
+          {activeChannel && activeChannel.type !== "public" && (
             <>
               <label style={lbl}>Valitse jäsen</label>
               <select value={inviteTargetUserId} onChange={e=>setInviteTargetUserId(e.target.value)} style={inp}>
@@ -2750,11 +2903,11 @@ export default function ChatPage() {
             <button onClick={()=>setShowInvite(false)} style={btnGhost}>Peruuta</button>
             <button
               onClick={sendInvite}
-              disabled={!activeChannel || !inviteTargetUserId || loadingInviteStatuses || Boolean(inviteCandidatesWithState.find(u2 => u2.id === inviteTargetUserId)?.inviteSent)}
+              disabled={!activeChannel || activeChannel.type === "public" || !inviteTargetUserId || loadingInviteStatuses || Boolean(inviteCandidatesWithState.find(u2 => u2.id === inviteTargetUserId)?.inviteSent)}
               style={{
                 ...btnPrimary,
-                opacity:(!activeChannel || !inviteTargetUserId || loadingInviteStatuses || Boolean(inviteCandidatesWithState.find(u2 => u2.id === inviteTargetUserId)?.inviteSent))?0.55:1,
-                cursor:(!activeChannel || !inviteTargetUserId || loadingInviteStatuses || Boolean(inviteCandidatesWithState.find(u2 => u2.id === inviteTargetUserId)?.inviteSent))?"default":"pointer"
+                opacity:(!activeChannel || activeChannel.type === "public" || !inviteTargetUserId || loadingInviteStatuses || Boolean(inviteCandidatesWithState.find(u2 => u2.id === inviteTargetUserId)?.inviteSent))?0.55:1,
+                cursor:(!activeChannel || activeChannel.type === "public" || !inviteTargetUserId || loadingInviteStatuses || Boolean(inviteCandidatesWithState.find(u2 => u2.id === inviteTargetUserId)?.inviteSent))?"default":"pointer"
               }}>
               Lähetä kutsu
             </button>
