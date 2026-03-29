@@ -39,6 +39,35 @@ const EQUIPMENT_EMOJIS = [
   "🎒","🪣","🧲","📦","🗃️","🏷️","🔑","🪪",
 ]
 
+const LOCATION_PRESETS = [
+  {
+    label: "Jousiksen kolo",
+    envKey: "VITE_LOCATION_JOUSIKSEN_KOLO",
+    fallback: "Jousiksen kolo, Helsinki, Finland",
+  },
+  {
+    label: "Tähtiksen kolo",
+    envKey: "VITE_LOCATION_TAHTIKSEN_KOLO",
+    fallback: "Tahtiksen kolo, Helsinki, Finland",
+  },
+  {
+    label: "Kämppä",
+    envKey: "VITE_LOCATION_KAMPPA",
+    fallback: "Kämppä, Siuntio, Finland",
+  },
+]
+
+const LOCATION_MAPS = LOCATION_PRESETS.reduce((acc, preset) => {
+  const addressFromEnv = String(import.meta.env?.[preset.envKey] || "").trim()
+  const address = addressFromEnv || preset.fallback
+  acc[preset.label] = {
+    label: preset.label,
+    query: address,
+    address,
+  }
+  return acc
+}, {})
+
 // ── Apufunktiot ───────────────────────────────────────────────────────────────
 function isOverdue(res) {
   if (!res.endDate || res.status === "returned" || res.status === "denied") return false
@@ -51,6 +80,25 @@ function statusLabel(res) {
   if (isOverdue(res))            return { text: "⚠️ Myöhässä",  color: "#f59e0b", bg: "rgba(245,158,11,0.15)" }
   if (res.status === "approved") return { text: "Hyväksytty",   color: "#4f7ef7", bg: "rgba(79,126,247,0.12)" }
   return { text: "Odottaa", color: "var(--text2)", bg: "rgba(255,255,255,0.06)" }
+}
+
+function isAddressFormat(value) {
+  const txt = String(value || "").trim()
+  return /^[^,]+,\s*\d{5}\s+.+$/u.test(txt)
+}
+
+function resolveLocationMap(locationName) {
+  const txt = String(locationName || "").trim()
+  if (!txt) return null
+  if (LOCATION_MAPS[txt]) return LOCATION_MAPS[txt]
+  if (isAddressFormat(txt)) {
+    return {
+      label: txt,
+      query: txt,
+      address: txt,
+    }
+  }
+  return null
 }
 
 // ── Pääkomponentti ─────────────────────────────────────────────────────────────
@@ -71,6 +119,8 @@ export default function EquipmentPage() {
   const [showAdminPanel, setShowAdminPanel]   = useState(false)
   const [adminTab, setAdminTab]     = useState("pending") // pending | active | history
   const [showHistoryModal, setShowHistoryModal] = useState(false)
+  const [showLocationMap, setShowLocationMap] = useState(false)
+  const [activeLocationMap, setActiveLocationMap] = useState(null)
   const [debugUsersById, setDebugUsersById] = useState({})
   const [notification, setNotification] = useState(null)
   const [loadingItems, setLoadingItems] = useState(true)
@@ -156,6 +206,24 @@ export default function EquipmentPage() {
   function showNotif(text, type = "success") {
     setNotification({ text, type })
     setTimeout(() => setNotification(null), 3500)
+  }
+
+  function getMapsSearchUrl(queryText) {
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(queryText)}`
+  }
+
+  function getMapsEmbedUrl(queryText) {
+    return `https://www.google.com/maps?q=${encodeURIComponent(queryText)}&output=embed`
+  }
+
+  function openLocationMap(locationName) {
+    const loc = resolveLocationMap(locationName)
+    if (!loc) {
+      showNotif("Käytä muotoa: Kiertotähdentie 4, 00740 Helsinki", "warn")
+      return
+    }
+    setActiveLocationMap(loc)
+    setShowLocationMap(true)
   }
 
   // ── Kalustokeskustelun luonti ──────────────────────────────────────────────
@@ -553,7 +621,6 @@ export default function EquipmentPage() {
             </p>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
               {[
-                ["Sijainti", "📍 " + (selected.location || "–")],
                 ["Kunto", selected.condition],
                 ["Saatavilla", `${selected.available} / ${selected.quantity}`],
                 ["Vastuuhenkilö", selected.ownerName || "–"],
@@ -563,6 +630,27 @@ export default function EquipmentPage() {
                   <div style={{ fontSize:13, fontWeight:500 }}>{v}</div>
                 </div>
               ))}
+            </div>
+            <div
+              onClick={() => selected.location && resolveLocationMap(selected.location) && openLocationMap(selected.location)}
+              style={{
+                background:"var(--bg3)",
+                borderRadius:8,
+                padding:"10px 12px",
+                marginBottom:16,
+                border: resolveLocationMap(selected.location)
+                  ? "1px solid rgba(79,126,247,0.3)"
+                  : "1px solid transparent",
+                cursor: resolveLocationMap(selected.location) ? "pointer" : "default",
+              }}
+            >
+              <div style={{ fontSize:10, color:"var(--text3)", marginBottom:4, textTransform:"uppercase" }}>Sijainti</div>
+              <div style={{ fontSize:13, fontWeight:500, display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
+                <span>📍 {selected.location || "–"}</span>
+                {resolveLocationMap(selected.location) && (
+                  <span style={{ fontSize:11, color:"#4f7ef7", fontWeight:500 }}>🗺️ Näytä kartalla</span>
+                )}
+              </div>
             </div>
             {selected.description && (
               <p style={{ fontSize:13, color:"var(--text2)", lineHeight:1.6, background:"var(--bg3)", padding:"10px 12px", borderRadius:8, margin:"0 0 16px" }}>
@@ -579,6 +667,56 @@ export default function EquipmentPage() {
               {selected.available > 0 && (
                 <button onClick={() => setShowRequest(true)} style={btnPrimary}>📬 Pyydä varausta</button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Sijainti kartalla -modal ───────────────────────────────────────── */}
+      {showLocationMap && activeLocationMap && (
+        <div
+          style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:130 }}
+          onClick={() => { setShowLocationMap(false); setActiveLocationMap(null) }}
+        >
+          <div
+            style={{ background:"var(--bg2)", border:"1px solid var(--border2)", borderRadius:16, padding:20, width:620, maxWidth:"94vw", maxHeight:"88vh", overflowY:"auto" }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
+              <div>
+                <div style={{ fontWeight:700, fontSize:16 }}>📍 {activeLocationMap.label}</div>
+                <div style={{ fontSize:12, color:"var(--text3)", marginTop:2 }}>{activeLocationMap.address}</div>
+              </div>
+              <button
+                onClick={() => { setShowLocationMap(false); setActiveLocationMap(null) }}
+                style={{ background:"transparent", border:"none", color:"var(--text2)", cursor:"pointer", fontSize:18 }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ borderRadius:12, overflow:"hidden", border:"1px solid var(--border)", background:"var(--bg3)", marginBottom:12 }}>
+              <iframe
+                title={`Kartta: ${activeLocationMap.label}`}
+                src={getMapsEmbedUrl(activeLocationMap.query)}
+                width="100%"
+                height="320"
+                style={{ border:0, display:"block" }}
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+              />
+            </div>
+
+            <div style={{ display:"flex", gap:8, justifyContent:"flex-end", flexWrap:"wrap" }}>
+              <a
+                href={getMapsSearchUrl(activeLocationMap.query)}
+                target="_blank"
+                rel="noreferrer"
+                style={{ ...btnPrimary, textDecoration:"none", display:"inline-flex", alignItems:"center" }}
+              >
+                🧭 Avaa Google Mapsissa
+              </a>
+              <button onClick={() => { setShowLocationMap(false); setActiveLocationMap(null) }} style={btnGhost}>Sulje</button>
             </div>
           </div>
         </div>
@@ -763,7 +901,7 @@ export default function EquipmentPage() {
 
             <label style={lbl}>Sijainti</label>
             <div style={{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap"}}>
-              {["Jousiksen kolo","Tähtiksen kolo","Kämppä"].map(loc=>(
+              {Object.keys(LOCATION_MAPS).map(loc=>(
                 <button key={loc} type="button"
                   onClick={()=>setForm(s=>({...s,location:loc}))}
                   style={{padding:"4px 10px",fontSize:12,borderRadius:20,cursor:"pointer",fontFamily:"system-ui",
@@ -774,7 +912,10 @@ export default function EquipmentPage() {
                 </button>
               ))}
             </div>
-            <input value={form.location} onChange={e => setForm(s => ({...s, location:e.target.value}))} placeholder="tai kirjoita oma sijainti..." style={inp} />
+            <input value={form.location} onChange={e => setForm(s => ({...s, location:e.target.value}))} placeholder="esim. Kiertotähdentie 4, 00740 Helsinki" style={inp} />
+            <div style={{ fontSize:11, color:"var(--text3)", marginTop:6 }}>
+              Kartta toimii valmiilla sijainneilla tai osoitemuodolla: Katu 1, 00100 Kaupunki
+            </div>
 
             <label style={lbl}>Kunto</label>
             <select value={form.condition} onChange={e => setForm(s => ({...s, condition:e.target.value}))} style={inp}>
