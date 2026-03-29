@@ -17,6 +17,7 @@ const STATUS_OPTIONS = [
 export default function ProfilePage({ onSaved }) {
   const { user, profile, logout } = useAuth()
   const [form, setForm]       = useState({ displayName:"", title:"", bio:"", phone:"", status:"online" })
+  const [nameError, setNameError] = useState("")
   const [saved, setSaved]     = useState(false)
   const [saving, setSaving]     = useState(false)
   const [showTermsModal, setShowTermsModal] = useState(null)
@@ -52,6 +53,39 @@ export default function ProfilePage({ onSaved }) {
     })
   }, [profile])
 
+  const roleValues = Array.from(new Set([
+    ...(Array.isArray(profile?.roles) ? profile.roles : []),
+    profile?.role,
+  ].filter(Boolean)))
+  const rolesText = roleValues.join(", ") || "Ei määritelty"
+  const hasLeaderRole = roleValues.includes("lippukunnanjohtaja")
+
+  const baselineForm = {
+    displayName: profile?.displayName || "",
+    title: profile?.title || "",
+    bio: profile?.bio || "",
+    phone: profile?.phone || "",
+    status: profile?.status || "online",
+  }
+  const isProfileDirty =
+    form.displayName !== baselineForm.displayName ||
+    form.title !== baselineForm.title ||
+    form.bio !== baselineForm.bio ||
+    form.phone !== baselineForm.phone ||
+    form.status !== baselineForm.status
+
+  function validateDisplayName(name) {
+    const parts = String(name || "").trim().split(/\s+/).filter(Boolean)
+    if (parts.length < 2) return "Nimi muodossa: Etunimi S"
+    if (parts[0].length < 2) return "Etunimen pitää olla vähintään 2 merkkiä"
+    if (parts[1].length < 1) return "Lisää sukunimen ensimmäinen kirjain"
+    return ""
+  }
+
+  useEffect(() => {
+    if (saved && isProfileDirty) setSaved(false)
+  }, [isProfileDirty, saved])
+
   // Tarkista Drive-linkitys
   useEffect(() => {
     setDriveLinked(isDriveLinked())
@@ -60,9 +94,17 @@ export default function ProfilePage({ onSaved }) {
   }, [])
 
   async function save() {
+    const trimmedName = form.displayName.trim()
+    const nameValidation = validateDisplayName(trimmedName)
+    if (nameValidation) {
+      setNameError(nameValidation)
+      return
+    }
+    setNameError("")
     setSaving(true)
     await updateDoc(doc(db, "users", user.uid), {
       ...form,
+      displayName: trimmedName,
       online: form.status !== "offline",
       updatedAt: serverTimestamp(),
     })
@@ -288,7 +330,7 @@ export default function ProfilePage({ onSaved }) {
               </div>
               <div>
                 <div style={{ fontWeight:600, fontSize:16 }}>{form.displayName||"Johtaja"}</div>
-                <div style={{ fontSize:13, color:"var(--text2)" }}>{profile?.role}</div>
+                <div style={{ fontSize:13, color:"var(--text2)" }}>{rolesText}</div>
                 {form.title && <div style={{ fontSize:12, color:"var(--text3)", marginTop:2 }}>{form.title}</div>}
               </div>
             </div>
@@ -310,13 +352,34 @@ export default function ProfilePage({ onSaved }) {
 
             <div style={{ background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:14, padding:20, display:"flex", flexDirection:"column", gap:14 }}>
               {[
-                ["Nimi", "displayName", "Etu- ja sukunimi", "text"],
+                ["Nimi", "displayName", "Etunimi S", "text"],
                 ["Titteli / tehtävä", "title", "esim. Laumajohtaja", "text"],
                 ["Puhelinnumero", "phone", "+358 40 123 4567", "tel"],
               ].map(([label, key, ph, type]) => (
                 <div key={key}>
                   <label style={lbl}>{label}</label>
-                  <input type={type} value={form[key]} onChange={e => setForm(f=>({...f,[key]:e.target.value}))} style={inp} placeholder={ph} />
+                  <input
+                    type={type}
+                    value={form[key]}
+                    onChange={e => {
+                      setForm(f=>({...f,[key]:e.target.value}))
+                      if (key === "displayName") {
+                        setNameError(validateDisplayName(e.target.value))
+                      }
+                    }}
+                    style={{
+                      ...inp,
+                      border: key === "displayName" && nameError
+                        ? "1px solid rgba(239,68,68,0.55)"
+                        : inp.border,
+                    }}
+                    placeholder={ph}
+                  />
+                  {key === "displayName" && (
+                    <div style={{ fontSize:11, color:nameError?"#f87171":"var(--text3)", marginTop:4 }}>
+                      {nameError || "Käytä muotoa: Etunimi S (esim. Maija K)"}
+                    </div>
+                  )}
                 </div>
               ))}
               <div>
@@ -325,7 +388,7 @@ export default function ProfilePage({ onSaved }) {
               </div>
               <div style={{ paddingTop:8, borderTop:"1px solid var(--border)" }}>
                 <div style={{ fontSize:11, color:"var(--text3)", marginBottom:3 }}>Rooli (admin muuttaa)</div>
-                <div style={{ fontSize:13, color:"var(--text2)" }}>{profile?.role} {profile?.role==="lippukunnanjohtaja"&&"👑"}</div>
+                <div style={{ fontSize:13, color:"var(--text2)" }}>{rolesText} {hasLeaderRole&&"👑"}</div>
               </div>
 
               {/* Käyttöehdot ja tietosuoja */}
@@ -559,6 +622,24 @@ export default function ProfilePage({ onSaved }) {
           </div>
         )}
       </div>
+    {isProfileDirty && (
+      <div style={{
+        position:"fixed",
+        left:"50%",
+        bottom:18,
+        transform:"translateX(-50%)",
+        background:"rgba(245,158,11,0.14)",
+        border:"1px solid rgba(245,158,11,0.35)",
+        color:"#f59e0b",
+        borderRadius:10,
+        padding:"10px 14px",
+        fontSize:13,
+        zIndex:320,
+        boxShadow:"0 8px 24px rgba(0,0,0,0.35)"
+      }}>
+        Tallentamattomia muutoksia
+      </div>
+    )}
     {/* Käyttöehdot / Tietosuoja */}
     {showTermsModal && (
       <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:300 }}
